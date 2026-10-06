@@ -1,0 +1,75 @@
+{
+  "name": "gaug",
+  "icon": "Assets/newGaugIcon.png",
+  "displayName": "Gaug",
+  "publisher": "Green",
+  "description": "Gaug is a new embeddable, modern, high-level programming language.",
+  "version": "0.5.5",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:gaug"
+  ],
+  "contributes": {
+    "languages": [
+        {
+            "id": "gaug",
+            "aliases": ["Gaug", "gaug", "Gaug Language"],
+            "extensions": [".gaug"],
+            "configuration": "./language-configuration.json",
+            "icon": {
+              "light": "./Assets/newGaugIcon.png",
+              "dark": "./Assets/newGaugIcon.png"
+            }
+        }
+    ],
+    "grammars": [
+        {
+            "language": "gaug",
+            "scopeName": "source.gaug",
+            "path": "./syntaxes/gaug.tmLanguage.json"
+        }
+    ],
+    "snippets": [
+        {
+            "language": "gaug",
+            "path": "./snippets.json"
+        }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.100.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "typescript-eslint": "^8.61.1",
+    "eslint": "^10.5.0",
+    "esbuild": "^0.28.1",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.3",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  }
+}
