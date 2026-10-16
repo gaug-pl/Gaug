@@ -5,6 +5,8 @@
 const http = require("http"), fs = require("fs"), path = require("path"), crypto = require("crypto"), zlib = require("zlib"), net = require("net");
 const { Pool } = require("pg");
 
+const FRONTEND_ORIGIN = "https://gaug-pl.github.io";
+
 const ROOT = path.resolve(__dirname, ".."), DATA = path.join(__dirname, "data");
 const PORT = +process.env.PORT || 3000, HOST = process.env.HOST || "127.0.0.1";
 const SECURE = process.env.SECURE_COOKIES === "1";          // set when served over HTTPS
@@ -297,9 +299,22 @@ function readJson(req, limit = 65536) {
   });
 }
 function sameOrigin(req) {
-  const o = req.headers.origin;
-  if (o) { try { return new URL(o).host === req.headers.host; } catch { return false; } }
-  return req.headers["sec-fetch-site"] === "same-origin";
+    const origin = req.headers.origin;
+
+    if (origin) {
+        try {
+            const host = new URL(origin).host;
+
+            return (
+                host === req.headers.host ||
+                origin === FRONTEND_ORIGIN
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    return req.headers["sec-fetch-site"] === "same-origin";
 }
 
 /* ---------- submission helpers ---------- */
@@ -556,6 +571,27 @@ function serve(req, res, url) {
 }
 
 const server = http.createServer(async (req, res) => {
+    const origin = req.headers.origin;
+    const allowedOrigin = origin === FRONTEND_ORIGIN;
+
+    if (allowedOrigin) {
+        res.setHeader("Access-Control-Allow-Origin", FRONTEND_ORIGIN);
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        res.setHeader("Access-Control-Max-Age", "600");
+        res.setHeader("Vary", "Origin");
+    }
+
+    if (req.method === "OPTIONS") {
+        if (!allowedOrigin) {
+            res.writeHead(403);
+            return res.end();
+        }
+
+        res.writeHead(204);
+        return res.end();
+    }
   try {
     if (Object.prototype.hasOwnProperty.call(db.bans, ip(req))) {
       return send(res, 403, "Access denied");
