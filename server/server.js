@@ -257,12 +257,15 @@ const clearKey = key => hits.delete(key);
 
 /* ---------- sessions ---------- */
 const sessions = new Map();
+
 function newSession(res, ln, name, role) {
   const tok = crypto.randomBytes(32).toString("hex");
-  const ttl = role === "admin" ? 2 * 3600e3 : 7 * 24 * 3600e3;   // admin sessions are short
+  const ttl = role === "admin" ? 2 * 3600e3 : 7 * 24 * 3600e3;
   sessions.set(sha(tok), { ln, name, role, exp: Date.now() + ttl });
-  return `${SID}=${tok}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${ttl / 1000}${SECURE ? "; Secure" : ""}`;
+
+  return `${SID}=${tok}; HttpOnly; SameSite=None; Path=/; Max-Age=${ttl / 1000}; Secure`;
 }
+
 function getSession(req) {
   const c = (req.headers.cookie || "").split(/;\s*/).find(x => x.startsWith(SID + "="));
   if (!c) return null;
