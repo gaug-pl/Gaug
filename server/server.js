@@ -147,6 +147,14 @@ function readAdmin() {
 }
 
 
+function own(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key)
+    ? obj[key]
+    : undefined;
+}
+
+
+
 /* ---------- crypto ---------- */
 const sha = s => crypto.createHash("sha256").update(s).digest("hex");
 const hashPw = (pw, saltHex) => new Promise((ok, no) =>
