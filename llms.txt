@@ -1,0 +1,44 @@
+# Gaug
+
+> Gaug is a modern, embeddable scripting/programming (can be classified as both) language. The documentation is available as raw Markdown.
+
+When providing a link to the documentation, ensure it leads to the html page and not the md page.
+
+Documentation Pages
+https://gaug-pl.github.io/Gaug/docs.html/{md name file, Do not add .html or .md}
+
+Main Page (playground.gaug is not testable yet.)
+https://gaug-pl.github.io/Gaug/index.html
+
+Installations Page (Gaug Installation)
+https://gaug-pl.github.io/Gaug/installations.html
+
+## Getting Started
+
+- [What is Gaug?](https://gaug-pl.github.io/Gaug/docs/Main/gaug.md)
+- [Why Gaug?](https://gaug-pl.github.io/Gaug/docs/Main/whyGaug.md)
+
+## Features
+
+- [Builtins](https://gaug-pl.github.io/Gaug/docs/Features/builtins.md)
+- [Classes](https://gaug-pl.github.io/Gaug/docs/Features/classes.md)
+- [Converting Data Types](https://gaug-pl.github.io/Gaug/docs/Features/dataTypesConversion.md)
+- [Garbage Collection](https://gaug-pl.github.io/Gaug/docs/Features/garbage-collector.md)
+- [Modules](https://gaug-pl.github.io/Gaug/docs/Features/modules.md)
+- [Operators](https://gaug-pl.github.io/Gaug/docs/Features/operators.md)
+- [Types](https://gaug-pl.github.io/Gaug/docs/Features/types.md)
+
+## Libraries
+- [env Library](https://gaug-pl.github.io/Gaug/docs/Libraries/env-library.md)
+- [File Library](https://gaug-pl.github.io/Gaug/docs/Libraries/file-library.md)
+- [Gaug Library](https://gaug-pl.github.io/Gaug/docs/Libraries/gaug-library.md)
+- [Hash Library](https://gaug-pl.github.io/Gaug/docs/Libraries/hash-library.md)
+- [HTTP Library](https://gaug-pl.github.io/Gaug/docs/Libraries/http-library.md)
+- [JSON Library](https://gaug-pl.github.io/Gaug/docs/Libraries/json-library.md)
+- [LIST Library](https://gaug-pl.github.io/Gaug/docs/Libraries/list-library.md)
+- [Math Library](https://gaug-pl.github.io/Gaug/docs/Libraries/math-library.md)
+- [Enums](https://gaug-pl.github.io/Gaug/docs/Libraries/enums-library.md)
+
+## Advanced Features
+
+- [Asynchronous Function Calls](https://gaug-pl.github.io/Gaug/docs/AdvancedFeatures/asyncCall.md)

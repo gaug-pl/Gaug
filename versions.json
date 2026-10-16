@@ -1,0 +1,14 @@
+{
+  "intro": "Download any version of Gaug. The newest version is listed first.",
+  "versions": [
+     {
+        "version": "1.0.0",
+        "date": "2026-10-15",
+        "latest": true,
+        "notes": "",
+        "files": [
+            { "name": "Windows (x64)", "file": "downloads/Gaug-v1.0.0-Windows-x64.zip" }
+        ]
+    }
+  ]
+}

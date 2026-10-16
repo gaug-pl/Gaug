@@ -1,0 +1,141 @@
+{
+  "nav": [
+    {
+      "text": "Home",
+      "link": "/",
+      "file": "index.md"
+    },
+    {
+      "text": "Features",
+      "link": "/builtins",
+      "file": "Features/builtins.md"
+    }
+  ],
+  "sidebar": [
+    {
+      "text": "Main",
+      "items": [
+        {
+          "text": "Why Gaug?",
+          "link": "/whyGaug",
+          "file": "Main/whyGaug.md"
+        },
+        {
+          "text": "What is Gaug?",
+          "link": "/gaug",
+          "file": "Main/gaug.md"
+        },
+        {
+          "text": "License",
+          "link": "/license",
+          "file": "license.md"
+        },
+        {
+          "text": "Installation",
+          "link": "/installation",
+          "file": "installation.md"
+        }
+      ]
+    },
+    {
+      "text": "Features",
+      "items": [
+        {
+          "text": "Builtins",
+          "link": "/builtins",
+          "file": "Features/builtins.md"
+        },
+        {
+          "text": "Types",
+          "link": "/types",
+          "file": "Features/types.md"
+        },
+        {
+          "text": "Operators",
+          "link": "/operators",
+          "file": "Features/operators.md"
+        },
+        {
+          "text": "Converting Data Types",
+          "link": "/dataTypesConversion",
+          "file": "Features/dataTypesConversion.md"
+        },
+        {
+          "text": "Classes",
+          "link": "/classes",
+          "file": "Features/classes.md"
+        },
+        {
+          "text": "Safe Calls",
+          "link": "/safecalls",
+          "file": "Features/attempt.md"
+        },
+        {
+          "text": "Garbage Collection",
+          "link": "/garbage-collector",
+          "file": "Features/garbage-collector.md"
+        },
+        {
+          "text": "Installing and using Modules",
+          "link": "/modules",
+          "file": "Features/modules.md"
+        }
+      ]
+    },
+    {
+      "text": "Libraries",
+      "items": [
+        {
+          "text": "Math Library",
+          "link": "/math-library",
+          "file": "Libraries/math-library.md"
+        },
+        {
+          "text": "List Library",
+          "link": "/list-library",
+          "file": "Libraries/list-library.md"
+        },
+        {
+          "text": "HTTP Library",
+          "link": "/http-library",
+          "file": "Libraries/http-library.md"
+        },
+        {
+          "text": "File Library",
+          "link": "/file-library",
+          "file": "Libraries/file-library.md"
+        },
+        {
+          "text": ".env Library",
+          "link": "/env-library",
+          "file": "Libraries/env-library.md"
+        },
+        {
+          "text": "Hash Library",
+          "link": "/hash-library",
+          "file": "Libraries/hash-library.md"
+        },
+        {
+          "text": "Gaug Library",
+          "link": "/gaug-library",
+          "file": "Libraries/gaug-library.md"
+        },
+        {
+          "text": "Enums",
+          "link": "/enums",
+          "file": "Libraries/enums-library.md"
+        }
+      ]
+    },
+    {
+      "text": "Advanced Features",
+      "items": [
+        {
+          "text": "Asynchronous Function Calls",
+          "link": "/asyncCall",
+          "file": "AdvancedFeatures/asyncCall.md"
+        }
+      ]
+    }
+  ]
+}
