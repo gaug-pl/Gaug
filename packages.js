@@ -4,7 +4,7 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
 
 (function () {
   const app = document.getElementById("app");
-  let me = null, licenses = [], notice = "";
+  let me = null, licenses = [], tags = [], notice = "";
 
   /* ---------- helpers ---------- */
   const SVG = new Set(["svg", "path", "polygon", "text", "circle"]);
@@ -37,6 +37,58 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
   const crumb = (...items) => h("div", { class: "crumb" }, items.map((it, i) => [i ? h("span", { class: "sep" }, "/") : null, it.href ? h("a", { href: it.href }, it.t) : h("span", { class: "muted" }, it.t)]));
   const status = s => h("span", { class: "st " + s }, s === "pending" ? "In review" : s[0].toUpperCase() + s.slice(1));
   const empty = t => h("p", { class: "muted", style: "margin:0;font-size:14px" }, t);
+
+  /* ---------- tags + package information menu ---------- */
+  const tagRow = (list, max) => h("div", { class: "tgs" }, (list || []).slice(0, max || 12).map(t => h("span", { class: "tg" }, t)));
+  const ftype = n => /\.gaug$/i.test(n) ? "Gaug Script" : /\.md$/i.test(n) ? "Markdown" : /\.json$/i.test(n) ? "JSON" : "Text";
+  const bytes = t => new TextEncoder().encode(t).length;
+  const fsize = n => n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB" : (n / 1048576).toFixed(1) + " MB";
+  function saveText(name, text) {
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+    const a = h("a", { href: url, download: name.split("/").pop() }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+  async function openInfo(name) {
+    document.querySelector(".pi-back")?.remove();
+    const prev = document.activeElement, body = h("div", { class: "pi-body" }, h("p", { class: "muted" }, "Loading…")), foot = h("div", { class: "pi-foot" });
+    function close() {
+      back.remove(); document.removeEventListener("keydown", onKey); document.body.classList.remove("pi-lock");
+      if (location.hash.startsWith("#/pkg/")) location.hash = "#/"; else if (prev && prev.focus) prev.focus();
+    }
+    const onKey = e => { if (e.key === "Escape") close(); };
+    const x = h("button", { class: "pi-x", type: "button", "aria-label": "Close", onclick: close }, icon("close", "pi-ic"));
+    const back = h("div", { class: "pi-back", onclick: e => { if (e.target === back) close(); } },
+      h("div", { class: "pi-modal", role: "dialog", "aria-modal": "true", "aria-labelledby": "pi-title" },
+        h("div", { class: "pi-head" }, icon("box", "pi-ic pi-cube"), h("h2", { id: "pi-title" }, "Package Information"), x), body, foot));
+    document.body.append(back); document.body.classList.add("pi-lock"); document.addEventListener("keydown", onKey); x.focus();
+    try {
+      const { package: p } = await api("packages/" + encodeURIComponent(name));
+      const names = Object.keys(p.files).sort((a, b) => (a === "main.gaug" ? -1 : b === "main.gaug" ? 1 : a.localeCompare(b)));
+      const sizes = Object.fromEntries(names.map(n => [n, bytes(p.files[n])])), total = names.reduce((a, n) => a + sizes[n], 0);
+      const pre = h("pre", { class: "view pi-view", hidden: true, tabindex: 0 }); let open = null;
+      const rows = names.map(n => {
+        const toggle = () => { open = open === n ? null : n; rows.forEach(r => r.setAttribute("aria-current", String(r.dataset.n === open))); pre.hidden = open === null; if (open) { pre.textContent = p.files[n]; pre.scrollTop = 0; } };
+        return h("div", { class: "pi-row", "data-n": n, role: "button", tabindex: 0, "aria-current": "false", onclick: toggle, onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } } },
+          icon("file", "pi-ic pi-f" + (/\.gaug$/i.test(n) ? " g" : "")), h("span", { class: "pi-n" }, n), h("span", { class: "pi-t" }, ftype(n)), h("span", { class: "pi-s" }, fsize(sizes[n])),
+          h("button", { class: "pi-dl", type: "button", title: "Download " + n, "aria-label": "Download " + n, onclick: e => { e.stopPropagation(); saveText(n, p.files[n]); } }, icon("down", "pi-ic")));
+      });
+      body.replaceChildren(
+        h("div", { class: "pi-top" },
+          h("div", { class: "pi-id" }, h("div", { class: "pi-tile" }, icon("code", "pi-ic")),
+            h("div", { style: "min-width:0" }, h("h3", { class: "pi-name" }, p.name), h("div", { class: "pi-by" }, "by " + p.author, p.adminAuthor && h("span", { class: "badge pi-sm" }, "ADMIN")),
+              h("p", { class: "pi-desc" }, p.description), tagRow(p.tags))),
+          h("div", { class: "pi-side" },
+            h("a", { class: "pi-btn", href: `${API_BASE}/api/packages/${encodeURIComponent(p.name)}/download`, rel: "noopener" }, icon("down", "pi-ic"), "Download"),
+            h("div", { class: "pi-meta" }, icon("zip", "pi-ic"), "ZIP size: " + fsize(p.zipSize)),
+            h("div", { class: "pi-meta" }, icon("file", "pi-ic"), "Total size (extracted): " + fsize(total)))),
+        h("h3", { class: "pi-h3" }, icon("file", "pi-ic"), "Files"),
+        h("div", { class: "pi-table" }, h("div", { class: "pi-th" }, h("span"), h("span", {}, "Name"), h("span", { class: "pi-t" }, "Type"), h("span", { class: "pi-s" }, "Size"), h("span")), rows),
+        pre);
+      foot.replaceChildren(h("div", { class: "pi-note" }, icon("info", "pi-ic"), "This package is provided as a ZIP file. After downloading, extract it to your Gaug packages directory."),
+        h("div", { class: "pi-right" },
+          me.role === "admin" && h("button", { class: "pi-tog", type: "button", onclick: async () => { try { await api("packages/" + encodeURIComponent(p.name) + "/verified", "POST", { verified: !p.verified }); render(); openInfo(p.name); } catch (e) { alert(e.message); } } }, p.verified ? "Remove verification" : "Mark as verified"),
+          h("div", { class: "pi-vf" + (p.verified ? " on" : "") }, icon("shield", "pi-ic"), h("div", {}, h("b", {}, p.verified ? "Verified by Gaug" : "Not verified"), h("small", {}, "v" + p.version)))));
+    } catch (e) { body.replaceChildren(h("p", { class: "err" }, e.message)); }
+  }
 
   /* ---------- login / sign up ---------- */
   function authView(registration) {
@@ -72,12 +124,16 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
     code: ["M16 18l6-6-6-6", "M8 6l-6 6 6 6"],
     file: ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", "M14 2v6h6", "M8 13h8", "M8 17h8"],
     dots: ["M12 5v.01", "M12 12v.01", "M12 19v.01"],
+    close: ["M18 6L6 18", "M6 6l12 12"],
+    shield: ["M12 3l8 3v6c0 4.5-3.2 8.2-8 9-4.8-.8-8-4.5-8-9V6z", "M9 12l2 2 4-4"],
+    info: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 11v5", "M12 8h.01"],
+    zip: ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", "M14 2v6h6", "M10 11h2", "M10 14h2", "M10 17h2"],
   };
   const icon = (n, cls = "ic") => h("svg", { viewBox: "0 0 24 24", class: cls, "aria-hidden": "true" }, P[n].map(d => h("path", { d })));
   document.addEventListener("click", () => document.querySelectorAll(".kmenu.open").forEach(m => m.classList.remove("open")));
 
   const avatar = () => h("div", { class: "avatar" }, me.avatar
-    ? h("img", { src: `/api/avatar/${encodeURIComponent(me.name.toLowerCase())}?v=${me.avatar}`, alt: "" })
+    ? h("img", { src: `${API_BASE}/api/avatar/${encodeURIComponent(me.name.toLowerCase())}?v=${me.avatar}`, alt: "" })
     : h("svg", { viewBox: "0 0 100 100", "aria-hidden": "true" },
       h("circle", { cx: 50, cy: 50, r: 50, fill: "#1f252d" }), h("circle", { cx: 50, cy: 38, r: 14, fill: "#8b949e" }), h("path", { d: "M24 80C24 65 36 58 50 58S76 65 76 80z", fill: "#8b949e" })));
   const cube = () => h("svg", { viewBox: "0 0 120 124", class: "cube", "aria-hidden": "true" },
@@ -115,13 +171,13 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
   function pkgRow(p) {
     const tile = ["code", "gear", "file"][[...p.name].reduce((a, c) => a + c.charCodeAt(0), 0) % 3];
     const menu = h("div", { class: "kmenu" },
-      h("button", { onclick: () => go("#/pkg/" + encodeURIComponent(p.name)) }, "View"),
+      h("button", { onclick: () => openInfo(p.name) }, "View"),
       (p.mine || me.role === "admin") && h("button", { class: "del", onclick: async () => { if (confirm(`Delete ${p.name}?`)) { await api("packages/" + encodeURIComponent(p.name), "DELETE"); render(); } } }, "Delete"));
     const kebab = h("div", { class: "kwrap", onclick: e => e.stopPropagation() },
       h("button", { class: "kbtn", "aria-label": "Package actions", onclick: e => { e.stopPropagation(); const o = menu.classList.contains("open"); document.querySelectorAll(".kmenu.open").forEach(m => m.classList.remove("open")); if (!o) menu.classList.add("open"); } }, icon("dots")), menu);
-    return h("div", { class: "prow", onclick: () => go("#/pkg/" + encodeURIComponent(p.name)) },
+    return h("div", { class: "prow", onclick: () => openInfo(p.name) },
       h("div", { class: "tile" }, icon(tile, "ic big")),
-      h("div", { class: "pinfo" }, h("b", {}, p.name), h("small", {}, p.description), h("span", {}, "v" + p.version + (p.mine ? "" : " · " + p.author))),
+      h("div", { class: "pinfo" }, h("b", {}, p.name, p.verified && h("span", { class: "pi-ver", title: "Verified by Gaug" }, icon("shield", "pi-ic"))), h("small", {}, p.description), h("span", {}, "v" + p.version, (!p.mine || p.adminAuthor) && " · " + p.author, p.adminAuthor && h("span", { class: "badge pi-sm" }, "ADMIN")), tagRow(p.tags, 3)),
       h("div", { class: "pstat" }, h("b", {}, p.files || 0), h("small", {}, "Files")),
       h("div", { class: "pstat" }, h("b", {}, p.license || "—"), h("small", {}, "License")), kebab);
   }
@@ -238,6 +294,11 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
     const lic = h("select", { id: "l" }, h("option", { value: "" }, "Select a license"), licenses.map(l => h("option", { value: l }, l)));
     const picked = h("div", { class: "picked" });
     const btn = h("button", { class: "btn", type: "submit" }, "Submit for Review");
+    const chosen = new Set();
+    const tagBox = h("div", { class: "tgpick", role: "group", "aria-label": "Tags" }, tags.map(t => h("button", { type: "button", class: "tg pick", "aria-pressed": "false", onclick: e => {
+      if (chosen.has(t)) chosen.delete(t); else if (chosen.size < 4) chosen.add(t); else { err.textContent = "Choose up to 4 tags."; return; }
+      err.textContent = ""; e.currentTarget.setAttribute("aria-pressed", String(chosen.has(t)));
+    } }, t)));
 
     function setFile(f) {
       err.textContent = "";
@@ -263,7 +324,7 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
       btn.disabled = true; btn.textContent = "Uploading…";
       try {
         const zip = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = () => no(new Error("Could not read the file")); r.readAsDataURL(file); });
-        await api("submissions", "POST", { name: name.value.trim(), version: ver.value.trim(), description: desc.value, license: lic.value, zip });
+        await api("submissions", "POST", { name: name.value.trim(), version: ver.value.trim(), description: desc.value, license: lic.value, tags: [...chosen], zip });
         notice = `"${name.value.trim()}" was uploaded and is waiting for review. It will appear in the registry once approved.`;
         go("#/");
       } catch (x) { err.textContent = x.message; btn.disabled = false; btn.textContent = "Submit for Review"; }
@@ -272,6 +333,7 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
       h("div", { class: "grid2" }, h("div", {}, h("label", { for: "n" }, "Package name ", h("span", { class: "req" }, "*")), name), h("div", {}, h("label", { for: "v" }, "Version ", h("span", { class: "req" }, "*")), ver)),
       h("label", { for: "d" }, "Description ", h("span", { class: "req" }, "*")), desc,
       h("label", { for: "l" }, "License ", h("span", { class: "req" }, "*")), lic,
+      h("label", {}, "Tags ", h("span", { class: "muted", style: "font-weight:400;font-size:13px" }, "(optional, up to 4)")), tagBox,
       err,
       h("div", { class: "foot" }, h("span", { class: "note", style: "margin:0" }, "Every package is reviewed by hand before it is published."), h("div", { class: "row" }, btn, h("a", { href: "#/", class: "btn ghost" }, "Cancel"))));
     show(crumb({ t: "Packages", href: "#/" }, { t: "Upload" }), h("h1", { style: "font-size:clamp(34px,5vw,52px)" }, "Upload a ", h("span", { style: "color:var(--green)" }, "Package")),
@@ -303,30 +365,20 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
     const v = viewer(s.files, s.flagList);
     const err = h("p", { class: "err", role: "alert" });
     const reason = h("input", { placeholder: "Reason (optional, shown to the author)", maxlength: 200 });
+    let verified = false;
+    const vsw = h("button", { type: "button", class: "pi-switch", role: "switch", "aria-checked": "false", onclick: () => { verified = !verified; vsw.setAttribute("aria-checked", String(verified)); } }, h("span", { class: "pi-k" }), h("span", {}, "Verified by Gaug"));
     const decide = async (a, body) => { try { await api(`submissions/${id}/${a}`, "POST", body || {}); notice = `${s.name} ${s.version} ${a === "approve" ? "approved and published" : "rejected"}.`; go("#/"); } catch (x) { err.textContent = x.message; } };
     show(crumb({ t: "Packages", href: "#/" }, { t: "Review" }),
       h("h1", { style: "font-size:clamp(34px,5vw,52px)" }, s.name, " ", h("span", { style: "color:var(--green)" }, s.version)),
-      h("p", { class: "sub" }, `${s.description} — by ${s.author} · ${s.license} · ${s.files ? Object.keys(s.files).length : 0} files`),
+      h("p", { class: "sub" }, `${s.description} — by ${s.author} · ${s.license} · ${s.files ? Object.keys(s.files).length : 0} files`), tagRow(s.tags),
       h("div", { class: "card" }, h("h2", {}, "Code"), v.box),
       h("div", { class: "card" }, h("h2", {}, `Flagged lines (${s.flagList.length})`),
         s.flagList.length ? h("div", {}, s.flagList.map(f => h("div", { class: "pkg", onclick: () => v.open(f.file, f.line) }, h("div", {}, h("b", {}, `${f.file}:${f.line}`), h("small", {}, f.why))))) : empty("Nothing matched the watch-list. Still read the code."),
         h("p", { class: "note" }, "Flags are only hints. They never approve or block a package.")),
-      h("div", { class: "card" }, reason, err, h("div", { class: "row" },
-        h("button", { class: "btn", onclick: () => confirm(`Publish ${s.name} ${s.version}?`) && decide("approve") }, "Approve & publish"),
+      h("div", { class: "card" }, h("div", { class: "pi-vrow" }, vsw, h("small", { class: "muted" }, "Adds the Verified by Gaug mark when published. Only turn this on after reading every file.")), reason, err, h("div", { class: "row" },
+        h("button", { class: "btn", onclick: () => confirm(`Publish ${s.name} ${s.version}${verified ? " as Verified by Gaug" : ""}?`) && decide("approve", { verified }) }, "Approve & publish"),
         h("button", { class: "btn danger", style: "height:44px", onclick: () => decide("reject", { reason: reason.value }) }, "Reject"),
         h("a", { class: "btn ghost", href: "#/" }, "Back"))));
-  }
-
-  /* ---------- published package ---------- */
-  async function pkgView(name) {
-    const { package: p } = await api("packages/" + encodeURIComponent(name));
-    const v = viewer(p.files);
-    const mine = me.role === "admin" || (await api("packages")).packages.some(x => x.name === p.name && x.mine);
-    show(crumb({ t: "Packages", href: "#/" }, { t: p.name }),
-      h("h1", { style: "font-size:clamp(34px,5vw,52px)" }, p.name, " ", h("span", { style: "color:var(--green)" }, p.version)),
-      h("p", { class: "sub" }, `${p.description} — by ${p.author} · ${p.license || "no license"}`),
-      h("div", { class: "card" }, v.box),
-      mine && h("button", { class: "btn danger", onclick: async () => { if (confirm(`Delete ${p.name}?`)) { await api("packages/" + encodeURIComponent(p.name), "DELETE"); go("#/"); } } }, "Delete package"));
   }
 
   /* ---------- router ---------- */
@@ -336,14 +388,14 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
     try {
       if (a === "upload") return uploadView();
       if (a === "review" && b) return await reviewView(b);
-      if (a === "pkg" && b) return await pkgView(decodeURIComponent(b));
+      if (a === "pkg" && b) { await overviewView(); return openInfo(decodeURIComponent(b)); }
       if ((a === "queue" || a === "all" || a === "controls") && me.role !== "admin") return await overviewView();
       return await ({ mine: mineView, submissions: subsView, queue: queueView, all: allView, controls: controlsView, settings: settingsView }[a] || overviewView)();
     } catch (x) { show(h("p", { class: "err" }, x.message), h("a", { href: "#/", class: "btn ghost" }, "Back")); }
   }
   async function boot() {
     const d = await api("me");
-    me = d.user; if (me) { me.bio = d.bio || ""; me.avatar = d.avatar || 0; } licenses = d.licenses || [];
+    me = d.user; if (me) { me.bio = d.bio || ""; me.avatar = d.avatar || 0; } licenses = d.licenses || []; tags = d.tags || [];
     if (!me) return authView(d.registration);
     render();
   }

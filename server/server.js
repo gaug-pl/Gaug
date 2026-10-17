@@ -108,7 +108,7 @@ async function initializeStorage() {
 function save() {
   // Serialize full-database writes to avoid overlapping saves
   // overwriting each other's snapshots.
-  saveQueue = saveQueue.then(async () => {
+  saveQueue = saveQueue.catch(() => {}).then(async () => {
     const snapshot = JSON.stringify(db);
 
     await pool.query(
@@ -165,6 +165,7 @@ const RESERVED = ["green", "admin", "administrator", "root", "system", "moderato
 const isReserved = n => RESERVED.includes(n.toLowerCase().replace(/_/g, ""));
 const USER_RE = /^[A-Za-z0-9_]{3,20}$/, PKG_RE = /^[a-z0-9][a-z0-9_-]{1,31}$/, VER_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
 const LICENSES = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC", "GPL-3.0", "Unlicense"];
+const TAGS = ["Math", "Utility", "Library", "String", "Data", "Time", "Game", "Network", "File", "Testing", "CLI", "Other"];   // authors pick up to 4
 const cmpVer = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 
 /* ---------- package upload limits ---------- */
@@ -251,6 +252,26 @@ function readZip(buf) {
   return out;
 }
 
+/* ---------- zip writer (for downloads: built in memory from the stored text files) ---------- */
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function buildZip(files, root) {
+  const out = [], cen = []; let off = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const nb = Buffer.from(root + "/" + name, "utf8"), data = Buffer.from(text, "utf8"), comp = zlib.deflateRawSync(data), crc = crc32(data);
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0x0800, 6); lh.writeUInt16LE(8, 8); lh.writeUInt16LE(0, 10); lh.writeUInt16LE(0x21, 12);
+    lh.writeUInt32LE(crc, 14); lh.writeUInt32LE(comp.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(nb.length, 26); lh.writeUInt16LE(0, 28);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(0x0314, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(0x0800, 8); ch.writeUInt16LE(8, 10); ch.writeUInt16LE(0, 12); ch.writeUInt16LE(0x21, 14);
+    ch.writeUInt32LE(crc, 16); ch.writeUInt32LE(comp.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(nb.length, 28); ch.writeUInt32LE((0o100644 << 16) >>> 0, 38); ch.writeUInt32LE(off, 42);
+    out.push(lh, nb, comp); cen.push(ch, nb); off += 30 + nb.length + comp.length;
+  }
+  const cd = Buffer.concat(cen), end = Buffer.alloc(22), n = Object.keys(files).length;
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(n, 8); end.writeUInt16LE(n, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(off, 16);
+  return Buffer.concat([...out, cd, end]);
+}
+
 /* ---------- rate limiting (memory only, nothing is written to disk) ---------- */
 const hits = new Map();
 function limited(key, max, windowMs) {
@@ -328,7 +349,7 @@ function sameOrigin(req) {
 }
 
 /* ---------- submission helpers ---------- */
-const brief = p => ({ id: p.id, name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, status: p.status, reason: p.reason || "", at: p.at, files: p.fileCount, flags: p.flagCount });
+const brief = p => ({ id: p.id, name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, status: p.status, reason: p.reason || "", at: p.at, files: p.fileCount, flags: p.flagCount, tags: p.tags || [], adminAuthor: p.owner === "green" });
 function prune() {   // decided submissions disappear after 30 days
   const cut = Date.now() - 30 * 86400e3; let ch = false;
   for (const [id, p] of Object.entries(db.pending)) if (p.status !== "pending" && p.at < cut) { delete db.pending[id]; ch = true; }
@@ -345,11 +366,11 @@ async function api(req, res, url) {
   const s = getSession(req), who = s && { name: s.name, role: s.role };
   const route = parts[0];
 
-  if (route === "me" && m === "GET") return send(res, 200, { user: who, bio: s ? (own(db.profiles, s.ln) || {}).bio || "" : "", avatar: s ? (own(db.profiles, s.ln) || {}).avatarAt || 0 : 0, registration: REGISTRATION, licenses: LICENSES });
+  if (route === "me" && m === "GET") return send(res, 200, { user: who, bio: s ? (own(db.profiles, s.ln) || {}).bio || "" : "", avatar: s ? (own(db.profiles, s.ln) || {}).avatarAt || 0 : 0, registration: REGISTRATION, licenses: LICENSES, tags: TAGS });
 
   if (route === "logout" && m === "POST") {
     if (s) sessions.delete(s.k);
-    return send(res, 200, { ok: true }, { "Set-Cookie": `${SID}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${SECURE ? "; Secure" : ""}` });
+    return send(res, 200, { ok: true }, { "Set-Cookie": `${SID}=; HttpOnly; SameSite=None; Path=/; Max-Age=0; Secure` });
   }
 
   if (route === "register" && m === "POST") {
@@ -392,7 +413,7 @@ async function api(req, res, url) {
   const isPublicPackageRead =
   route === "packages" &&
   m === "GET" &&
-  (parts.length === 1 || parts.length === 2);
+  (parts.length === 1 || parts.length === 2 || (parts.length === 3 && parts[2] === "download"));
 
 if (!s && !isPublicPackageRead) {
   return fail(res, 401, "Log in first");
@@ -437,11 +458,29 @@ if (!s && !isPublicPackageRead) {
   if (route === "packages") {
     const name = parts[1];
     if (m === "GET" && !name) {
-      return send(res, 200, { packages: Object.values(db.packages).map(({ name, version, description, license, author, owner, files, code }) => ({ name, version, description, license, author, mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length })) });
+      return send(res, 200, { packages: Object.values(db.packages).map(({ name, version, description, license, author, owner, files, code, tags, verified }) => ({ name, version, description, license, author, tags: tags || [], verified: !!verified, adminAuthor: owner === "green", mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length })) });
+    }
+    if (m === "GET" && name && parts[2] === "download") {   // public, like the package list
+      const p = own(db.packages, name);
+      if (!p) return fail(res, 404, "Not found");
+      const zip = buildZip(p.files || { "main.gaug": p.code || "" }, p.name);
+      res.writeHead(200, { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${p.name}-${p.version}.zip"`, "Content-Length": zip.length, "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; sandbox", ...BASE });
+      return res.end(zip);
     }
     if (m === "GET") {
       const p = own(db.packages, name);
-      return p ? send(res, 200, { package: { name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, files: p.files || { "main.gaug": p.code || "" } } }) : fail(res, 404, "Not found");
+      if (!p) return fail(res, 404, "Not found");
+      const files = p.files || { "main.gaug": p.code || "" };
+      return send(res, 200, { package: { name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, adminAuthor: p.owner === "green", tags: p.tags || [], verified: !!p.verified, mine: !!s && p.owner === s.ln, zipSize: buildZip(files, p.name).length, files } });
+    }
+    if (m === "POST" && name && parts[2] === "verified") {   // admin: toggle the "Verified by Gaug" mark on a published package
+      if (s.role !== "admin") return fail(res, 403, "Not allowed");
+      const p = own(db.packages, name);
+      if (!p) return fail(res, 404, "Not found");
+      const b = await readJson(req).catch(e => e);
+      if (b instanceof Error || typeof b.verified !== "boolean") return fail(res, 400, "Send { verified: true | false }");
+      p.verified = b.verified; await save();
+      return send(res, 200, { ok: true, verified: p.verified });
     }
     if (m === "DELETE" && name) {
       const p = own(db.packages, name);
@@ -478,6 +517,8 @@ if (!s && !isPublicPackageRead) {
       if (typeof version !== "string" || !VER_RE.test(version)) return fail(res, 400, "Version must look like 1.0.0");
       if (typeof description !== "string" || !description.trim() || description.length > 300) return fail(res, 400, "Description is required (max 300 characters)");
       if (!LICENSES.includes(license)) return fail(res, 400, "Pick a license");
+      const tags = Array.isArray(b.tags) ? [...new Set(b.tags)] : [];
+      if (tags.length > 4 || tags.some(t => !TAGS.includes(t))) return fail(res, 400, "Choose up to 4 tags from the list");
       if (typeof zip !== "string" || !zip.length || zip.length > 1.5e6) return fail(res, 400, "Attach a .zip under 1 MB");
       const ex = own(db.packages, n);
       if (ex && ex.owner !== s.ln && s.role !== "admin") return fail(res, 403, "That package name belongs to someone else");
@@ -487,7 +528,7 @@ if (!s && !isPublicPackageRead) {
       if (mine.some(p => p.name === n && p.version === version)) return fail(res, 409, "That version is already waiting for review");
       let files; try { files = readZip(Buffer.from(zip, "base64")); } catch (e) { return fail(res, 400, e.message); }
       const flags = scan(files), pid = crypto.randomBytes(6).toString("hex");
-      db.pending[pid] = { id: pid, name: n, version, description: description.trim(), license, owner: s.ln, author: s.name, status: "pending", at: Date.now(), files, flags, fileCount: Object.keys(files).length, flagCount: flags.length };
+      db.pending[pid] = { id: pid, name: n, version, description: description.trim(), license, tags, owner: s.ln, author: s.name, status: "pending", at: Date.now(), files, flags, fileCount: Object.keys(files).length, flagCount: flags.length };
       await save();;
       return send(res, 200, { ok: true, id: pid });
     }
@@ -498,7 +539,9 @@ if (!s && !isPublicPackageRead) {
       if (action === "approve") {
         const ex = own(db.packages, p.name);
         if (ex && ex.owner !== p.owner) return fail(res, 409, "That name now belongs to another user");
-        db.packages[p.name] = { name: p.name, version: p.version, description: p.description, license: p.license, files: p.files, code: p.files["main.gaug"] || "", owner: p.owner, author: ex ? ex.author : p.author };
+        if (ex && p.owner !== "green" && cmpVer(p.version, ex.version) <= 0) return fail(res, 409, `Version ${ex.version} or newer is already published. Reject this one.`);
+        const ab = await readJson(req).catch(() => ({}));   // { verified } from the review page; a new version starts unverified unless ticked
+        db.packages[p.name] = { name: p.name, version: p.version, description: p.description, license: p.license, tags: p.tags || [], verified: ab.verified === true, files: p.files, code: p.files["main.gaug"] || "", owner: p.owner, author: ex ? ex.author : p.author };
         p.status = "approved";
       } else {
         const b = await readJson(req).catch(() => ({}));
