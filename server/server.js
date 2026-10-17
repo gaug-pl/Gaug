@@ -154,7 +154,6 @@ function own(obj, key) {
 }
 
 
-
 /* ---------- crypto ---------- */
 const sha = s => crypto.createHash("sha256").update(s).digest("hex");
 const hashPw = (pw, saltHex) => new Promise((ok, no) =>
