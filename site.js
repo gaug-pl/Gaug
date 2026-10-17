@@ -629,13 +629,17 @@
     const typeHtml = t => t.split(/\||\s+or\s+/).map(x => `<span class="y">${esc(x.trim() || "any")}</span>`).join(' <span class="o">|</span> ');
     const PARAM = /^param\s+(\.\.\.)?([A-Za-z_]\w*)(\?)?(?:\s*:\s*([^-=]+?))?(?:\s*=\s*(.+?))?(?:\s+-\s+(.*))?$/;
     const RET = /^returns?\s+([^-]+?)(?:\s+-\s+(.*))?$/;
+    // "version 1.2" inside a ::: fn or ::: const block = the first Gaug version that has it
+    const VER_LINE = /^version\s+v?(\d+(?:\.\d+){0,2})\s*$/i;
+    const verBadge = v => v ? `<span class="fn-ver" title="Added in Gaug ${esc(v)}. Older versions don't have this.">Since ${esc(v)}</span>` : "";
     const fnBlock = (name, body) => {
       const params = [], desc = [];
-      let ret = null, fence = false, m;
+      let ret = null, ver = null, fence = false, m;
       for (const ln of body.split("\n")) {
         const t = ln.trim();
         if (/^```/.test(t)) fence = !fence;
-        if (!fence && (m = t.match(PARAM))) params.push({ name: m[2], rest: !!m[1], opt: !!m[3] || m[5] !== undefined, type: (m[4] || "any").trim(), def: m[5] ? m[5].trim() : "", desc: m[6] || "" });
+        if (!fence && (m = t.match(VER_LINE))) ver = m[1];
+        else if (!fence && (m = t.match(PARAM))) params.push({ name: m[2], rest: !!m[1], opt: !!m[3] || m[5] !== undefined, type: (m[4] || "any").trim(), def: m[5] ? m[5].trim() : "", desc: m[6] || "" });
         else if (!fence && (m = t.match(RET))) ret = { type: m[1].trim(), desc: m[2] || "" };
         else desc.push(ln);
       }
@@ -649,7 +653,7 @@
         `<li><code>${p.rest ? "..." : ""}${esc(p.name)}${p.opt ? "?" : ""}</code> ${typeHtml(p.type)}${p.opt ? ` <em>(optional${p.def ? `, default <code>${esc(p.def)}</code>` : ""})</em>` : ""}${p.desc ? " &mdash; " + inline(p.desc) : ""}</li>`).join("");
       const psec = params.length ? `<div class="fn-h">Parameters</div><ul class="fn-list">${items}</ul>` : "";
       const rsec = `<div class="fn-h">Returns</div><p class="fn-ret">${typeHtml(rtype)}${ret && ret.desc ? " &mdash; " + inline(ret.desc) : ""}</p>`;
-      return `<section class="fn" id="${id}"><div class="fn-sig">${sig}</div>${d}${psec}${rsec}</section>`;
+      return `<section class="fn" id="${id}"${ver ? ` data-since="${esc(ver)}"` : ""}><div class="fn-sig">${verBadge(ver)}${sig}</div>${d}${psec}${rsec}</section>`;
     };
 
     // ::: const name  ->  constant card with type, value and description
@@ -657,18 +661,19 @@
     const VALUE_LINE = /^value\s+(.+)$/;
     const constBlock = (name, body) => {
       const desc = [];
-      let type = "any", value = null, fence = false, m;
+      let type = "any", value = null, ver = null, fence = false, m;
       for (const ln of body.split("\n")) {
         const t = ln.trim();
         if (/^```/.test(t)) fence = !fence;
-        if (!fence && (m = t.match(TYPE_LINE))) type = m[1].trim();
+        if (!fence && (m = t.match(VER_LINE))) ver = m[1];
+        else if (!fence && (m = t.match(TYPE_LINE))) type = m[1].trim();
         else if (!fence && (m = t.match(VALUE_LINE))) value = m[1].trim();
         else desc.push(ln);
       }
       const sig = `<font color="#94c1ff">${esc(name)}</font><span class="o">:</span> ${typeHtml(type)}` +
   (value !== null ? ` <span class="o">=</span> ${highlight(value)}` : "");
       const id = "const-" + name.toLowerCase().replace(/[^\w]+/g, "-");
-      return `<section class="fn" id="${id}"><div class="fn-sig">${sig}</div>${blocks(desc.join("\n"))}</section>`;
+      return `<section class="fn" id="${id}"${ver ? ` data-since="${esc(ver)}"` : ""}><div class="fn-sig">${verBadge(ver)}${sig}</div>${blocks(desc.join("\n"))}</section>`;
     };
 
     // ::: chart [bar|hbar|line] [Title]   body = "Label: value" lines, pasted CSV, or a "csv path" line

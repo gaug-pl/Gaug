@@ -1,9 +1,5 @@
 # List Library
 
-::: warning
-This feature is still in progress and is not complete.
-:::
-
 ::: fn list.new
 > Creates a new list.
 
@@ -22,8 +18,6 @@ print("Created a new list! " + List); # Output: Created a new list! []
 param list: list - The list to push the value to.
 param value: super - The value to push to the list.
 
-returns null
-
 ```gaug
 var List = list.new();
 list.push(List, "Hello World");
@@ -34,12 +28,12 @@ print(List); # [Hello World]
 :::
 
 ::: fn list.get
-> Gets a value from a list using it's index.
 param list: list - The list that has the passed index registered.
 param index: int - The index to get the value from.
 
-returns null
+returns super
 
+> Gets a value from a list using it's index.
 ```gaug
 var List = list.new();
 list.push(List, "Hello World");
@@ -52,6 +46,8 @@ print(list.get(List, 0)); # Hello World
 ::: fn list.copy
 param list: list - The list that has the passed index registered.
 param index: int - The index to get the value from.
+
+returns list
 
 ::: warning WARNING
 Attempting to check if a list is equal using == will always result to false, even if it contains the same values.
@@ -76,6 +72,8 @@ print(NewList);
 ::: fn list.remove
 param list: list - The list that has the passed index registered.
 param index: int - The index to get the value from.
+
+returns list
 
 > Removes the value from a list using the passed index.
 

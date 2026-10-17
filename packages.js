@@ -85,6 +85,7 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
         pre);
       foot.replaceChildren(h("div", { class: "pi-note" }, icon("info", "pi-ic"), "This package is provided as a ZIP file. After downloading, extract it to your Gaug packages directory."),
         h("div", { class: "pi-right" },
+          p.mine && h("a", { class: "pi-tog", href: "#/update/" + encodeURIComponent(p.name), style: "text-decoration:none" }, "Update"),
           me && me.role === "admin" && h("button", { class: "pi-tog", type: "button", onclick: async () => { try { await api("packages/" + encodeURIComponent(p.name) + "/verified", "POST", { verified: !p.verified }); render(); openInfo(p.name); } catch (e) { alert(e.message); } } }, p.verified ? "Remove verification" : "Mark as verified"),
           h("div", { class: "pi-vf" + (p.verified ? " on" : "") }, icon("shield", "pi-ic"), h("div", {}, h("b", {}, p.verified ? "Verified by Gaug" : "Not verified"), h("small", {}, "v" + p.version)))));
     } catch (e) { body.replaceChildren(h("p", { class: "err" }, e.message)); }
@@ -173,9 +174,10 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
     const tile = ["code", "gear", "file"][[...p.name].reduce((a, c) => a + c.charCodeAt(0), 0) % 3];
     const menu = h("div", { class: "kmenu" },
       h("button", { onclick: () => openInfo(p.name) }, "View"),
+      p.mine && h("button", { onclick: () => go("#/update/" + encodeURIComponent(p.name)) }, "Update"),
       (p.mine || (me && me.role === "admin")) && h("button", { class: "del", onclick: async () => { if (confirm(`Delete ${p.name}?`)) { await api("packages/" + encodeURIComponent(p.name), "DELETE"); render(); } } }, "Delete"));
     const kebab = h("div", { class: "kwrap", onclick: e => e.stopPropagation() },
-      h("button", { class: "kbtn", "aria-label": "Package actions", onclick: e => { e.stopPropagation(); const o = menu.classList.contains("open"); document.querySelectorAll(".kmenu.open").forEach(m => m.classList.remove("open")); if (!o) menu.classList.add("open"); } }, icon("dots")), menu);
+      h("button", { class: "kbtn", "aria-label": "Package actions", onclick: e => { e.stopPropagation(); const o = menu.classList.contains("open"); document.querySelectorAll(".kmenu.open").forEach(m => m.classList.remove("open")); if (!o) { menu.classList.add("open"); menu.classList.remove("up"); if (menu.getBoundingClientRect().bottom > window.innerHeight - 8) menu.classList.add("up"); } } }, icon("dots")), menu);
     return h("div", { class: "prow", onclick: () => openInfo(p.name) },
       h("div", { class: "tile" }, icon(tile, "ic big")),
       h("div", { class: "pinfo" }, h("b", {}, p.name, p.verified && h("span", { class: "pi-ver", title: "Verified by Gaug" }, icon("shield", "pi-ic"))), h("small", {}, p.description), h("span", {}, "v" + p.version, (!p.mine || p.adminAuthor) && " · " + p.author, p.adminAuthor && h("span", { class: "badge pi-sm" }, "ADMIN")), tagRow(p.tags, 3)),
@@ -285,8 +287,9 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
   }
 
   /* ---------- upload page ---------- */
-  function uploadView() {
+  function uploadView(upd) {   // upd = the published package when this is an update
     let file = null;
+    const label = upd ? "Submit Update" : "Submit for Review";
     const err = h("p", { class: "err", role: "alert" });
     const input = h("input", { type: "file", accept: ".zip,application/zip", hidden: true });
     const name = h("input", { id: "n", placeholder: "my-awesome-package", maxlength: 32 });
@@ -294,12 +297,18 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
     const desc = h("textarea", { id: "d", placeholder: "What does your package do?", maxlength: 300, style: "font-family:var(--sans);white-space:pre-wrap;min-height:96px" });
     const lic = h("select", { id: "l" }, h("option", { value: "" }, "Select a license"), licenses.map(l => h("option", { value: l }, l)));
     const picked = h("div", { class: "picked" });
-    const btn = h("button", { class: "btn", type: "submit" }, "Submit for Review");
-    const chosen = new Set();
-    const tagBox = h("div", { class: "tgpick", role: "group", "aria-label": "Tags" }, tags.map(t => h("button", { type: "button", class: "tg pick", "aria-pressed": "false", onclick: e => {
+    const btn = h("button", { class: "btn", type: "submit" }, label);
+    const chosen = new Set(upd ? upd.tags || [] : []);
+    const tagBox = h("div", { class: "tgpick", role: "group", "aria-label": "Tags" }, tags.map(t => h("button", { type: "button", class: "tg pick", "aria-pressed": String(chosen.has(t)), onclick: e => {
       if (chosen.has(t)) chosen.delete(t); else if (chosen.size < 4) chosen.add(t); else { err.textContent = "Choose up to 4 tags."; return; }
       err.textContent = ""; e.currentTarget.setAttribute("aria-pressed", String(chosen.has(t)));
     } }, t)));
+
+    if (upd) {   // an update keeps the name; everything else starts as it is now
+      name.value = upd.name; name.readOnly = true; name.style.opacity = ".6";
+      const v = upd.version.split("."); v[2] = String(+v[2] + 1); ver.value = v.join(".");
+      desc.value = upd.description || ""; lic.value = upd.license || "";
+    }
 
     function setFile(f) {
       err.textContent = "";
@@ -326,19 +335,19 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
       try {
         const zip = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = () => no(new Error("Could not read the file")); r.readAsDataURL(file); });
         await api("submissions", "POST", { name: name.value.trim(), version: ver.value.trim(), description: desc.value, license: lic.value, tags: [...chosen], zip });
-        notice = `"${name.value.trim()}" was uploaded and is waiting for review. It will appear in the registry once approved.`;
+        notice = upd ? `Version ${ver.value.trim()} of "${upd.name}" was uploaded and is waiting for review. The published version stays live until it is approved.` : `"${name.value.trim()}" was uploaded and is waiting for review. It will appear in the registry once approved.`;
         go("#/");
-      } catch (x) { err.textContent = x.message; btn.disabled = false; btn.textContent = "Submit for Review"; }
+      } catch (x) { err.textContent = x.message; btn.disabled = false; btn.textContent = label; }
     } },
       drop, input,
-      h("div", { class: "grid2" }, h("div", {}, h("label", { for: "n" }, "Package name ", h("span", { class: "req" }, "*")), name), h("div", {}, h("label", { for: "v" }, "Version ", h("span", { class: "req" }, "*")), ver)),
+      h("div", { class: "grid2" }, h("div", {}, h("label", { for: "n" }, "Package name ", h("span", { class: "req" }, "*")), name), h("div", {}, h("label", { for: "v" }, "Version ", h("span", { class: "req" }, "*"), upd && h("span", { class: "muted", style: "font-weight:400;font-size:13px" }, ` (current ${upd.version})`)), ver)),
       h("label", { for: "d" }, "Description ", h("span", { class: "req" }, "*")), desc,
       h("label", { for: "l" }, "License ", h("span", { class: "req" }, "*")), lic,
       h("label", {}, "Tags ", h("span", { class: "muted", style: "font-weight:400;font-size:13px" }, "(optional, up to 4)")), tagBox,
       err,
       h("div", { class: "foot" }, h("span", { class: "note", style: "margin:0" }, "Every package is reviewed by hand before it is published."), h("div", { class: "row" }, btn, h("a", { href: "#/", class: "btn ghost" }, "Cancel"))));
-    show(crumb({ t: "Packages", href: "#/" }, { t: "Upload" }), h("h1", { style: "font-size:clamp(34px,5vw,52px)" }, "Upload a ", h("span", { style: "color:var(--green)" }, "Package")),
-      h("p", { class: "sub" }, "Publish your package to the Gaug package registry."), form);
+    show(crumb({ t: "Packages", href: "#/" }, { t: upd ? "Update" : "Upload" }), h("h1", { style: "font-size:clamp(34px,5vw,52px)" }, upd ? "Update " : "Upload a ", h("span", { style: "color:var(--green)" }, upd ? upd.name : "Package")),
+      h("p", { class: "sub" }, upd ? `Upload a new zip with a higher version number. It's reviewed before it replaces version ${upd.version}, which stays live until then.` : "Publish your package to the Gaug package registry."), form);
   }
 
   /* ---------- file viewer (inert text) ---------- */
@@ -400,6 +409,7 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
     if (!me) return authView(regOpen);
     try {
       if (a === "upload") return uploadView();
+      if (a === "update" && b) { const { package: p } = await api("packages/" + encodeURIComponent(decodeURIComponent(b))); return p.mine ? uploadView(p) : go("#/"); }
       if (a === "review" && b) return await reviewView(b);
       if (a === "pkg" && b) { await overviewView(); return openInfo(decodeURIComponent(b)); }
       if ((a === "queue" || a === "all" || a === "controls") && me.role !== "admin") return await overviewView();
