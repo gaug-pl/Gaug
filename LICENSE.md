@@ -1,7 +1,7 @@
 # MIT LICENSE
 > Copyright (c) 2026-2027 Green
 
-You are free to use this software in any project or purpose at no cost and with no permission requirement from Green, the owner of the software. But you are required to credit Gaug by adding a link to the documentation (https://gaug.rf.gd/).
+You are free to use this software in any project or purpose at no cost and with no permission requirement from Green, the owner of the software. But you are required to credit Gaug by adding a link to the documentation (https://gaug-pl.github.io/Gaug/index.html#/).
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
