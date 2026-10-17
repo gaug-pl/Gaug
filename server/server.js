@@ -103,6 +103,12 @@ async function initializeStorage() {
   db.pending ||= {};
   db.profiles ||= {};
   db.bans ||= {};
+
+  // Public profile numbers: Green is always #1, everyone else gets the next free number in sign-up order.
+  db.nextId ||= 2;
+  let changed = false;
+  for (const u of Object.values(db.users)) if (!u.id) { u.id = db.nextId++; changed = true; }
+  if (changed) await save();
 }
 
 function save() {
@@ -348,6 +354,21 @@ function sameOrigin(req) {
     return req.headers["sec-fetch-site"] === "same-origin";
 }
 
+/* ---------- public profiles ---------- */
+const ownerId = ln => ln === "green" ? 1 : (own(db.users, ln) || {}).id || null;
+function findUser(ref) {   // ref is a profile number ("1") or a username
+  if (/^\d{1,9}$/.test(ref)) {
+    const id = +ref;
+    if (id === 1) return { ln: "green", name: "Green", role: "admin", id: 1 };
+    for (const [ln, u] of Object.entries(db.users)) if (u.id === id) return { ln, name: u.name, role: "user", id, banned: u.banned };
+    return null;
+  }
+  const ln = ref.toLowerCase();
+  if (ln === "green") return { ln, name: "Green", role: "admin", id: 1 };
+  const u = own(db.users, ln);
+  return u ? { ln, name: u.name, role: "user", id: u.id, banned: u.banned } : null;
+}
+
 /* ---------- submission helpers ---------- */
 const brief = p => ({ id: p.id, name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, status: p.status, reason: p.reason || "", at: p.at, files: p.fileCount, flags: p.flagCount, tags: p.tags || [], adminAuthor: p.owner === "green" });
 function prune() {   // decided submissions disappear after 30 days
@@ -363,7 +384,7 @@ async function api(req, res, url) {
     if (!sameOrigin(req)) return fail(res, 403, "Cross-site request blocked");
     if (!/^application\/json/.test(req.headers["content-type"] || "") && m !== "DELETE" && !(m === "POST" && parts[0] === "submissions" && parts[2])) return fail(res, 415, "JSON only");
   }
-  const s = getSession(req), who = s && { name: s.name, role: s.role };
+  const s = getSession(req), who = s && { name: s.name, role: s.role, id: s.ln === "green" ? 1 : (db.users[s.ln] || {}).id };
   const route = parts[0];
 
   if (route === "me" && m === "GET") return send(res, 200, { user: who, bio: s ? (own(db.profiles, s.ln) || {}).bio || "" : "", avatar: s ? (own(db.profiles, s.ln) || {}).avatarAt || 0 : 0, registration: REGISTRATION, licenses: LICENSES, tags: TAGS });
@@ -387,7 +408,7 @@ async function api(req, res, url) {
     const salt = crypto.randomBytes(16).toString("hex"), hash = (await hashPw(p, salt)).toString("hex");
     const ln = u.toLowerCase();
     if (db.users[ln]) return fail(res, 409, "That username is not available");
-    db.users[ln] = { name: u, salt, hash, lastIp: a }; await save();;
+    db.users[ln] = { name: u, salt, hash, lastIp: a, id: db.nextId++ }; await save();
     return send(res, 200, { user: { name: u, role: "user" } }, { "Set-Cookie": newSession(res, ln, u, "user") });
   }
 
@@ -414,8 +435,9 @@ async function api(req, res, url) {
   route === "packages" &&
   m === "GET" &&
   (parts.length === 1 || parts.length === 2 || (parts.length === 3 && parts[2] === "download"));
+const isPublicProfileRead = m === "GET" && parts.length === 2 && (route === "profiles" || route === "avatar");
 
-if (!s && !isPublicPackageRead) {
+if (!s && !isPublicPackageRead && !isPublicProfileRead) {
   return fail(res, 401, "Log in first");
 }
 
@@ -446,8 +468,20 @@ if (!s && !isPublicPackageRead) {
     }
   }
 
+  if (route === "profiles" && m === "GET" && parts[1]) {   // public: shown at /packages/users/<number>
+    let ref; try { ref = decodeURIComponent(parts[1]); } catch { return fail(res, 404, "Not found"); }
+    const u = findUser(ref);
+    if (!u || (u.banned && (!s || s.role !== "admin"))) return fail(res, 404, "Not found");
+    const pr = own(db.profiles, u.ln) || {};
+    const pk = Object.values(db.packages).filter(p => p.owner === u.ln).map(({ name, version, description, license, author, owner, files, code, tags, verified }) =>
+      ({ name, version, description, license, author, tags: tags || [], verified: !!verified, adminAuthor: owner === "green", mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length }));
+    return send(res, 200, { profile: { id: u.id, name: u.name, role: u.role, bio: pr.bio || "", avatar: pr.avatarAt || 0, packages: pk } });
+  }
+
   if (route === "avatar" && m === "GET") {   // served as an inert image: no sniffing, sandboxed, no scripts
-    const p = own(db.profiles, (parts[1] || "").toLowerCase());
+    const aln = (parts[1] || "").toLowerCase(), au = own(db.users, aln);
+    if (au && au.banned && (!s || s.role !== "admin")) return fail(res, 404, "Not found");
+    const p = own(db.profiles, aln);
     if (!p || !p.avatar) return fail(res, 404, "Not found");
     const buf = Buffer.from(p.avatar, "base64");
     res.writeHead(200, { "Content-Type": "image/jpeg", "Content-Length": buf.length, "Cache-Control": "private, max-age=3600", "Content-Security-Policy": "default-src 'none'; sandbox", ...BASE });
@@ -471,7 +505,7 @@ if (!s && !isPublicPackageRead) {
       const p = own(db.packages, name);
       if (!p) return fail(res, 404, "Not found");
       const files = p.files || { "main.gaug": p.code || "" };
-      return send(res, 200, { package: { name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, adminAuthor: p.owner === "green", tags: p.tags || [], verified: !!p.verified, mine: !!s && p.owner === s.ln, zipSize: buildZip(files, p.name).length, files } });
+      return send(res, 200, { package: { name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, adminAuthor: p.owner === "green", authorId: ownerId(p.owner), tags: p.tags || [], verified: !!p.verified, mine: !!s && p.owner === s.ln, zipSize: buildZip(files, p.name).length, files } });
     }
     if (m === "POST" && name && parts[2] === "verified") {   // admin: toggle the "Verified by Gaug" mark on a published package
       if (s.role !== "admin") return fail(res, 403, "Not allowed");
@@ -564,7 +598,7 @@ if (!s && !isPublicPackageRead) {
     if (route === "users" && m === "GET") {
       const cnt = {}; for (const p of Object.values(db.packages)) cnt[p.owner] = (cnt[p.owner] || 0) + 1;
       return send(res, 200, {
-        users: Object.entries(db.users).map(([ln, u]) => ({ name: u.name, banned: u.banned || null, ip: u.lastIp || "", packages: cnt[ln] || 0 })),
+        users: Object.entries(db.users).map(([ln, u]) => ({ id: u.id, name: u.name, banned: u.banned || null, ip: u.lastIp || "", packages: cnt[ln] || 0 })),
         ips: Object.entries(db.bans).map(([a, b]) => ({ ip: a, ...b })),
       });
     }
