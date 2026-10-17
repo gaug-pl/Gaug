@@ -91,9 +91,19 @@
           "file": "Libraries/math-library.md"
         },
         {
+          "text": "String Library",
+          "link": "/string-library",
+          "file": "Libraries/string-library.md"
+        },
+        {
           "text": "List Library",
           "link": "/list-library",
           "file": "Libraries/list-library.md"
+        },
+        {
+          "text": "Dictionary Library",
+          "link": "/dict-library",
+          "file": "Libraries/dict-library.md"
         },
         {
           "text": "HTTP Library",
