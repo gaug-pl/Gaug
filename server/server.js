@@ -104,6 +104,10 @@ async function initializeStorage() {
   db.profiles ||= {};
   db.bans ||= {};
 
+  // Logins survive restarts and redeploys: sessions are kept in the database (only hashed tokens).
+  db.sessions ||= {};
+  for (const [k, v] of Object.entries(db.sessions)) { if (v.exp > Date.now()) sessions.set(k, v); else delete db.sessions[k]; }
+
   // Public profile numbers: Green is always #1, everyone else gets the next free number in sign-up order.
   db.nextId ||= 2;
   let changed = false;
@@ -291,11 +295,14 @@ const clearKey = key => hits.delete(key);
 
 /* ---------- sessions ---------- */
 const sessions = new Map();
+const dropSession = k => { sessions.delete(k); delete db.sessions[k]; };
 
 function newSession(res, ln, name, role) {
   const tok = crypto.randomBytes(32).toString("hex");
   const ttl = role === "admin" ? 2 * 3600e3 : 7 * 24 * 3600e3;
-  sessions.set(sha(tok), { ln, name, role, exp: Date.now() + ttl });
+  const key = sha(tok), rec = { ln, name, role, exp: Date.now() + ttl };
+  sessions.set(key, rec); db.sessions[key] = rec;
+  save().catch(e => console.error("Could not save session:", e.message));
 
   return `${SID}=${tok}; HttpOnly; SameSite=None; Path=/; Max-Age=${ttl / 1000}; Secure`;
 }
@@ -304,12 +311,12 @@ function getSession(req) {
   const c = (req.headers.cookie || "").split(/;\s*/).find(x => x.startsWith(SID + "="));
   if (!c) return null;
   const k = sha(c.slice(SID.length + 1)), s = sessions.get(k);
-  if (!s || s.exp < Date.now() || (db.users[s.ln] && db.users[s.ln].banned)) { sessions.delete(k); return null; }
+  if (!s || s.exp < Date.now() || (db.users[s.ln] && db.users[s.ln].banned)) { dropSession(k); return null; }
   return { ...s, k };
 }
 setInterval(() => {
   const now = Date.now();
-  for (const [k, s] of sessions) if (s.exp < now) sessions.delete(k);
+  for (const [k, s] of sessions) if (s.exp < now) dropSession(k);
   for (const [k, h] of hits) if (h.until < now) hits.delete(k);
 }, 60e3).unref();
 
@@ -355,6 +362,7 @@ function sameOrigin(req) {
 }
 
 /* ---------- public profiles ---------- */
+const bannedOwner = ln => { const u = own(db.users, ln); return !!(u && u.banned); };   // banned users disappear from public pages
 const ownerId = ln => ln === "green" ? 1 : (own(db.users, ln) || {}).id || null;
 function findUser(ref) {   // ref is a profile number ("1") or a username
   if (/^\d{1,9}$/.test(ref)) {
@@ -390,7 +398,7 @@ async function api(req, res, url) {
   if (route === "me" && m === "GET") return send(res, 200, { user: who, bio: s ? (own(db.profiles, s.ln) || {}).bio || "" : "", avatar: s ? (own(db.profiles, s.ln) || {}).avatarAt || 0 : 0, registration: REGISTRATION, licenses: LICENSES, tags: TAGS });
 
   if (route === "logout" && m === "POST") {
-    if (s) sessions.delete(s.k);
+    if (s) { dropSession(s.k); await save(); }
     return send(res, 200, { ok: true }, { "Set-Cookie": `${SID}=; HttpOnly; SameSite=None; Path=/; Max-Age=0; Secure` });
   }
 
@@ -471,7 +479,7 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
   if (route === "profiles" && m === "GET" && parts[1]) {   // public: shown at /packages/users/<number>
     let ref; try { ref = decodeURIComponent(parts[1]); } catch { return fail(res, 404, "Not found"); }
     const u = findUser(ref);
-    if (!u || (u.banned && (!s || s.role !== "admin"))) return fail(res, 404, "Not found");
+    if (!u || u.banned) return fail(res, 404, "Not found");
     const pr = own(db.profiles, u.ln) || {};
     const pk = Object.values(db.packages).filter(p => p.owner === u.ln).map(({ name, version, description, license, author, owner, files, code, tags, verified }) =>
       ({ name, version, description, license, author, tags: tags || [], verified: !!verified, adminAuthor: owner === "green", mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length }));
@@ -480,7 +488,7 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
 
   if (route === "avatar" && m === "GET") {   // served as an inert image: no sniffing, sandboxed, no scripts
     const aln = (parts[1] || "").toLowerCase(), au = own(db.users, aln);
-    if (au && au.banned && (!s || s.role !== "admin")) return fail(res, 404, "Not found");
+    if (au && au.banned) return fail(res, 404, "Not found");
     const p = own(db.profiles, aln);
     if (!p || !p.avatar) return fail(res, 404, "Not found");
     const buf = Buffer.from(p.avatar, "base64");
@@ -492,18 +500,18 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
   if (route === "packages") {
     const name = parts[1];
     if (m === "GET" && !name) {
-      return send(res, 200, { packages: Object.values(db.packages).map(({ name, version, description, license, author, owner, files, code, tags, verified }) => ({ name, version, description, license, author, tags: tags || [], verified: !!verified, adminAuthor: owner === "green", mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length })) });
+      return send(res, 200, { packages: Object.values(db.packages).filter(p => !bannedOwner(p.owner) || (s && s.role === "admin")).map(({ name, version, description, license, author, owner, files, code, tags, verified }) => ({ name, version, description, license, author, tags: tags || [], verified: !!verified, adminAuthor: owner === "green", mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length })) });
     }
     if (m === "GET" && name && parts[2] === "download") {   // public, like the package list
       const p = own(db.packages, name);
-      if (!p) return fail(res, 404, "Not found");
+      if (!p || (bannedOwner(p.owner) && !(s && s.role === "admin"))) return fail(res, 404, "Not found");
       const zip = buildZip(p.files || { "main.gaug": p.code || "" }, p.name);
       res.writeHead(200, { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${p.name}-${p.version}.zip"`, "Content-Length": zip.length, "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; sandbox", ...BASE });
       return res.end(zip);
     }
     if (m === "GET") {
       const p = own(db.packages, name);
-      if (!p) return fail(res, 404, "Not found");
+      if (!p || (bannedOwner(p.owner) && !(s && s.role === "admin"))) return fail(res, 404, "Not found");
       const files = p.files || { "main.gaug": p.code || "" };
       return send(res, 200, { package: { name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, adminAuthor: p.owner === "green", authorId: ownerId(p.owner), tags: p.tags || [], verified: !!p.verified, mine: !!s && p.owner === s.ln, zipSize: buildZip(files, p.name).length, files } });
     }
@@ -608,7 +616,7 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
       if (parts[2] === "ban") {
         const b = await readJson(req).catch(() => ({}));
         u.banned = { reason: typeof b.reason === "string" ? b.reason.slice(0, 200) : "", at: Date.now() };
-        for (const [k, v] of sessions) if (v.ln === ln) sessions.delete(k);
+        for (const [k, v] of sessions) if (v.ln === ln) dropSession(k);
       } else delete u.banned;
       await save();;
       return send(res, 200, { ok: true });
@@ -631,7 +639,7 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
       delete db.users[ln]; delete db.profiles[ln];
       for (const k of Object.keys(db.packages)) if (db.packages[k].owner === ln) delete db.packages[k];
       for (const k of Object.keys(db.pending)) if (db.pending[k].owner === ln) delete db.pending[k];
-      for (const [k, v] of sessions) if (v.ln === ln) sessions.delete(k);
+      for (const [k, v] of sessions) if (v.ln === ln) dropSession(k);
       await save();;
       return send(res, 200, { ok: true });
     }
