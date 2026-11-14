@@ -1,5 +1,9 @@
 # env Library
 
+::: notice
+This library must be first fetched with `get gauglib env`.
+:::
+
 ::: warning
 This feature is still in progress and is not complete.
 :::
