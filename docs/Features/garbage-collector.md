@@ -1,7 +1,7 @@
 # Garbage Collector
 
 ::: warning
-It is not recommended to use `gc.disable()` unless you know what you are doing.
+It is not recommended to use ::: fn gc.disable() ::: unless you know what you are doing.
 
 If not handled well you may cause memory leaks and lead to your program crashing!
 :::
@@ -12,8 +12,9 @@ This feature is still in progress and is not complete.
 ### **This documentation is outdated and is in current rework!**
 :::
 
-## `gc.enable()`
+::: fn gc.enable
 > Enables the Garbage Collector, automatically turned on.
+:::
 
 ## `gc.disable()`
 > Disables the Garbage Collector.

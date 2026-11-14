@@ -1,277 +1,3 @@
-// (function () {
-//   const g = typeof window !== "undefined" ? window : globalThis;
-//   const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-//   const slug = t => t.toLowerCase().replace(/<[^>]*>/g, "").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-");
-
-//   /* ---------- Gaug syntax highlighter (tmLanguage-style scopes) ---------- */
-//   const RULES = [
-//     ["c", /\/\/[^\n]*/y],
-//     ["t", /"(?:[^"\\\n]|\\.)*"?/y],
-//     ["n", /\b\d+(?:\.\d+)?\b/y],
-//     ["k", /\b(?:if|elseif|else|for|in|return|async)\b/y],
-//     ["s", /\b(?:const|var)\b/y],
-//     ["f", /\b(?:math|list|gc|http|file|hash|gaug)(?=\.)|(?<=\.)[A-Za-z_]\w*(?=\()|[A-Za-z_]\w*(?=\()/y],
-//     ["y", /\b(?:number|string|list|null)\b/y],
-//     ["o", />>>|->|\+=|==|!=|<=|>=|[-+*\/%<>=!]/y],
-//     ["v", /[A-Za-z_]\w*/y]
-//   ];
-//   function highlight(src) {
-//     let i = 0, out = "";
-//     while (i < src.length) {
-//       let hit = false;
-//       for (const [cls, re] of RULES) {
-//         re.lastIndex = i;
-//         const m = re.exec(src);
-//         if (m && m[0].length) { out += `<span class="${cls}">${esc(m[0])}</span>`; i += m[0].length; hit = true; break; }
-//       }
-//       if (!hit) { out += esc(src[i]); i++; }
-//     }
-//     return out;
-//   }
-
-//   /* ---------- Markdown renderer ---------- */
-//   function md(src, resolve) {
-//     resolve = resolve || (h => h);
-//     src = src.replace(/\r/g, "").replace(/^---\n[\s\S]*?\n---\n?/, "");
-//     const isList = l => /^\s*([-*+]|\d+\.)\s+/.test(l);
-//     const row = s => s.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
-
-//     const inline = s => {
-//       const codes = [];
-//       s = s.replace(/`([^`]+)`/g, (_, c) => "\u0000" + (codes.push(c) - 1) + "\u0000");
-//       s = esc(s);
-//       s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img alt="$1" src="$2">');
-//       s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, h) => {
-//         const ext = /^https?:/.test(h);
-//         return `<a href="${resolve(h).replace(/"/g, "&quot;")}"${ext ? ' target="_blank" rel="noopener"' : ""}>${t}</a>`;
-//       });
-//       s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-//            .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, "$1<em>$2</em>");
-//       return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${esc(codes[i])}</code>`);
-//     };
-
-//     const list = lines => {
-//       const base = lines[0].match(/^\s*/)[0].length, tag = /^\s*\d/.test(lines[0]) ? "ol" : "ul", items = [];
-//       for (const ln of lines) {
-//         const ind = ln.match(/^\s*/)[0].length;
-//         if (ind <= base && isList(ln)) items.push({ t: ln.replace(/^\s*([-*+]|\d+\.)\s+/, ""), sub: [] });
-//         else if (!items.length) continue;
-//         else if (isList(ln) || items[items.length - 1].sub.length) items[items.length - 1].sub.push(ln);
-//         else items[items.length - 1].t += " " + ln.trim();
-//       }
-//       return `<${tag}>` + items.map(it => {
-//         const sub = it.sub.filter(x => x.trim());
-//         return `<li>${inline(it.t)}${sub.length && isList(sub[0]) ? list(sub) : ""}</li>`;
-//       }).join("") + `</${tag}>`;
-//     };
-
-//     const starts = l => /^(```|#{1,4}\s|>|:::|\s*([-*+]|\d+\.)\s|(-{3,}|\*{3,})\s*$)/.test(l);
-
-//     // ::: function name  ->  signature card with parameters, return value and description
-//     const typeHtml = t => t.split("|").map(x => `<span class="y">${esc(x.trim() || "any")}</span>`).join(' <span class="o">|</span> ');
-//     const PARAM = /^param\s+(\.\.\.)?([A-Za-z_]\w*)(\?)?(?:\s*:\s*([^-]+?))?(?:\s+-\s+(.*))?$/;
-//     const RET = /^returns?\s+([^-]+?)(?:\s+-\s+(.*))?$/;
-//     const fnBlock = (name, body) => {
-//       const params = [], desc = [];
-//       let ret = null, fence = false, m;
-//       for (const ln of body.split("\n")) {
-//         const t = ln.trim();
-//         if (/^```/.test(t)) fence = !fence;
-//         if (!fence && (m = t.match(PARAM))) params.push({ name: m[2], rest: !!m[1], opt: !!m[3], type: (m[4] || "any").trim(), desc: m[5] || "" });
-//         else if (!fence && (m = t.match(RET))) ret = { type: m[1].trim(), desc: m[2] || "" };
-//         else desc.push(ln);
-//       }
-//       const rtype = ret ? ret.type : "null";
-//       const sig = `<span class="f">${esc(name)}</span>(` +
-//         params.map(p => `${p.rest ? "..." : ""}<span class="v">${esc(p.name)}</span>${p.opt ? "?" : ""}: ${typeHtml(p.type)}`).join(", ") +
-//         `) <span class="o">&gt;&gt;&gt;</span> ${typeHtml(rtype)}`;
-//       const id = "fn-" + name.toLowerCase().replace(/[^\w]+/g, "-");
-//       const d = blocks(desc.join("\n"));
-//       const items = params.map(p =>
-//         `<li><code>${p.rest ? "..." : ""}${esc(p.name)}${p.opt ? "?" : ""}</code> ${typeHtml(p.type)}${p.desc ? " &mdash; " + inline(p.desc) : ""}</li>`).join("");
-//       const psec = params.length ? `<div class="fn-h">Parameters</div><ul class="fn-list">${items}</ul>` : "";
-//       const rsec = `<div class="fn-h">Returns</div><p class="fn-ret">${typeHtml(rtype)}${ret && ret.desc ? " &mdash; " + inline(ret.desc) : ""}</p>`;
-//       return `<section class="fn" id="${id}"><div class="fn-sig">${sig}</div>${d}${psec}${rsec}</section>`;
-//     };
-
-//     const blocks = text => {
-//       const L = text.split("\n"), out = [];
-//       let i = 0, m;
-//       while (i < L.length) {
-//         const l = L[i];
-//         if (!l.trim()) { i++; continue; }
-//         if ((m = l.match(/^```\s*([\w-]*)/))) {
-//           const b = []; i++;
-//           while (i < L.length && !/^```/.test(L[i])) b.push(L[i++]);
-//           i++;
-//           const c = b.join("\n");
-//           out.push(`<div class="cbw"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre class="cb"><code>${m[1] === "gaug" ? highlight(c) : esc(c)}</code></pre></div>`);
-//           continue;
-//         }
-//         if ((m = l.match(/^:::\s*(\w+)\s*(.*)$/))) {
-//           if (m[1] === "download") {
-//             const [href, ...rest] = m[2].trim().split(/\s+/);
-//             out.push(`<p><a class="dl" href="${esc(href)}" download>${esc(rest.join(" ") || href.split("/").pop())}</a></p>`);
-//             i++; continue;
-//           }
-//           const b = []; i++;
-//           while (i < L.length && !/^:::\s*$/.test(L[i])) b.push(L[i++]);
-//           i++;
-//           if (m[1] === "function" || m[1] === "fn") { out.push(fnBlock(m[2].trim(), b.join("\n"))); continue; }
-//           const title = m[2] || m[1][0].toUpperCase() + m[1].slice(1);
-//           out.push(`<div class="callout ${m[1]}"><p class="ct">${esc(title)}</p>${blocks(b.join("\n"))}</div>`);
-//           continue;
-//         }
-//         if ((m = l.match(/^(#{1,4})\s+(.*?)\s*#*\s*$/))) {
-//           out.push(`<h${m[1].length} id="${slug(m[2])}">${inline(m[2])}</h${m[1].length}>`);
-//           i++; continue;
-//         }
-//         if (/^(-{3,}|\*{3,})\s*$/.test(l)) { out.push("<hr>"); i++; continue; }
-//         if (/^>/.test(l)) {
-//           const b = [];
-//           while (i < L.length && /^>/.test(L[i])) b.push(L[i++].replace(/^>\s?/, ""));
-//           out.push(`<blockquote>${blocks(b.join("\n"))}</blockquote>`);
-//           continue;
-//         }
-//         if (l.includes("|") && i + 1 < L.length && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(L[i + 1])) {
-//           const h = row(l), rows = [];
-//           i += 2;
-//           while (i < L.length && L[i].trim() && L[i].includes("|")) rows.push(row(L[i++]));
-//           out.push(`<table><thead><tr>${h.map(c => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>` +
-//             rows.map(r => `<tr>${r.map(c => `<td>${inline(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table>`);
-//           continue;
-//         }
-//         if (isList(l)) {
-//           const b = [], base = l.match(/^\s*/)[0].length, kind = x => /^\s*\d/.test(x);
-//           const same = x => isList(x) && (x.match(/^\s*/)[0].length > base || kind(x) === kind(l));
-//           while (i < L.length && (same(L[i]) || (L[i].trim() && !isList(L[i]) && /^\s{2,}/.test(L[i])) || (!L[i].trim() && i + 1 < L.length && same(L[i + 1])))) b.push(L[i++]);
-//           out.push(list(b));
-//           continue;
-//         }
-//         const b = [];
-//         while (i < L.length && L[i].trim() && !(b.length && starts(L[i]))) b.push(L[i++].trim());
-//         out.push(`<p>${inline(b.join(" "))}</p>`);
-//       }
-//       return out.join("\n");
-//     };
-//     return blocks(src);
-//   }
-
-//   // JSON parser that tolerates trailing commas (outside of strings)
-//   const lenient = t => JSON.parse(t.replace(/("(?:[^"\\]|\\.)*")|,(\s*[}\]])/g, (m, str, close) => str || close));
-
-//   /* ---------- documentation.json loader ---------- */
-//   let docsP;
-//   function loadDocs() {
-//     return docsP || (docsP = fetch("documentation.json", { cache: "no-cache" })
-//       .then(r => { if (!r.ok) throw new Error("documentation.json: HTTP " + r.status); return r.text(); })
-//       // tolerate trailing commas (outside of strings) before parsing
-//       .then(lenient)
-//       .then(d => {
-//         d.flat = [];
-//         for (const grp of d.sidebar) for (const it of grp.items) d.flat.push({ ...it, group: grp.text, key: it.link.replace(/^\//, "") });
-//         d.first = d.flat[0];
-//         return d;
-//       }));
-//   }
-
-//   g.Gaug = { esc, slug, highlight, md, loadDocs, lenient };
-//   if (typeof document === "undefined") return;
-
-//   /* ---------- shared nav behavior ---------- */
-//   const $ = id => document.getElementById(id);
-//   const root = document.documentElement;
-//   const label = $("themeLabel"), menu = $("menu"), btn = $("themeBtn");
-
-//   function setTheme(t) {
-//     root.dataset.theme = t === "light" ? "light" : "dark";
-//     label.textContent = t[0].toUpperCase() + t.slice(1);
-//     menu.querySelectorAll("button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.t === t)));
-//     try { localStorage.setItem("gaug-theme", t); } catch (e) {}
-//   }
-//   let saved = "auto";
-//   try { saved = localStorage.getItem("gaug-theme") || "auto"; } catch (e) {}
-//   setTheme(saved);
-//   btn.addEventListener("click", e => { e.stopPropagation(); menu.classList.toggle("open"); });
-//   menu.addEventListener("click", e => { const b = e.target.closest("button"); if (b) setTheme(b.dataset.t); });
-
-//   // copy button on code blocks
-//   document.addEventListener("click", e => {
-//     const b = e.target.closest(".copy");
-//     if (!b) return;
-//     const text = b.parentElement.querySelector("pre code").textContent;
-//     const done = () => { b.textContent = "Copied"; b.classList.add("ok"); setTimeout(() => { b.textContent = "Copy"; b.classList.remove("ok"); }, 1500); };
-//     const fallback = () => {
-//       const t = document.createElement("textarea");
-//       t.value = text; t.style.position = "fixed"; t.style.opacity = "0";
-//       document.body.appendChild(t); t.select();
-//       try { document.execCommand("copy"); done(); } catch (err) {}
-//       t.remove();
-//     };
-//     if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
-//     else fallback();
-//   });
-
-//   // links that should open the first documentation page
-//   const docLinks = document.querySelectorAll("[data-docs]");
-//   if (docLinks.length) loadDocs().then(d => docLinks.forEach(a => a.href = "docs.html#" + d.first.link)).catch(() => {});
-
-//   // search across titles and page contents
-//   const q = $("q"), res = $("results");
-//   let index = null, hits = [], sel = -1;
-//   async function build() {
-//     if (index) return index;
-//     const d = await loadDocs();
-//     index = await Promise.all(d.flat.map(async it => {
-//       let text = "";
-//       try { const r = await fetch("docs/" + encodeURI(it.file), { cache: "no-cache" }); if (r.ok) text = await r.text(); } catch (e) {}
-//       return { it, plain: text.replace(/^---\n[\s\S]*?\n---\n?/, "").replace(/[#>*`|:]/g, " ").replace(/\s+/g, " ").trim() };
-//     }));
-//     return index;
-//   }
-//   function paint() {
-//     res.innerHTML = hits.length
-//       ? hits.map((h, n) => `<a class="res${n === sel ? " sel" : ""}" href="docs.html#${h.it.link}"><b>${esc(h.it.text)}</b><small>${esc(h.snip || h.it.group)}</small></a>`).join("")
-//       : `<div class="none">No results</div>`;
-//     res.classList.add("open");
-//   }
-//   async function run() {
-//     const term = q.value.trim().toLowerCase();
-//     if (!term) { res.classList.remove("open"); return; }
-//     const idx = await build();
-//     if (q.value.trim().toLowerCase() !== term) return;
-//     hits = idx.map(({ it, plain }) => {
-//       const t = it.text.toLowerCase(), p = plain.toLowerCase().indexOf(term);
-//       const score = (t.includes(term) ? (t.startsWith(term) ? 15 : 10) : 0) + (p >= 0 ? 1 : 0);
-//       return { it, score, snip: p >= 0 ? (p > 40 ? "…" : "") + plain.slice(Math.max(0, p - 40), p + 90) : "" };
-//     }).filter(h => h.score).sort((a, b) => b.score - a.score).slice(0, 8);
-//     sel = hits.length ? 0 : -1;
-//     paint();
-//   }
-//   q.addEventListener("input", run);
-//   q.addEventListener("focus", () => { if (q.value.trim()) run(); else build().catch(() => {}); });
-//   q.addEventListener("keydown", e => {
-//     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-//       if (!hits.length) return;
-//       e.preventDefault();
-//       sel = (sel + (e.key === "ArrowDown" ? 1 : -1) + hits.length) % hits.length;
-//       paint();
-//     } else if (e.key === "Enter" && hits[Math.max(sel, 0)]) {
-//       location.href = "docs.html#" + hits[Math.max(sel, 0)].it.link;
-//       res.classList.remove("open");
-//       q.blur();
-//     } else if (e.key === "Escape") { res.classList.remove("open"); q.blur(); }
-//   });
-//   res.addEventListener("click", () => { res.classList.remove("open"); q.value = ""; });
-//   document.addEventListener("click", e => {
-//     menu.classList.remove("open");
-//     if (!e.target.closest(".search")) res.classList.remove("open");
-//   });
-//   document.addEventListener("keydown", e => {
-//     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); q.focus(); q.select(); }
-//   });
-// })();
-
 (function () {
   const g = typeof window !== "undefined" ? window : globalThis;
   const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -383,6 +109,24 @@
     if (typeof document === "undefined" || document.getElementById("gaug-chart-css")) return;
     const st = document.createElement("style");
     st.id = "gaug-chart-css"; st.textContent = CHART_CSS;
+    document.head.appendChild(st);
+  }
+
+  /* ---------- notice styles (injected on first use) ---------- */   // NEW
+  const NOTICE_CSS = `
+.notice{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;padding:10px 14px;border:1px solid var(--line);border-left:3px solid #94c1ff;border-radius:6px;background:rgba(148,193,255,.08);font-size:14px;line-height:1.5;color:var(--body)}
+.notice::before{content:"i";flex:none;width:18px;height:18px;margin-top:1px;border:1.5px solid #94c1ff;border-radius:50%;box-sizing:border-box;font:italic 700 12px/15px serif;text-align:center;color:#94c1ff}
+.notice-body{min-width:0}
+.notice-body>*{margin:0}
+.notice-body>*+*{margin-top:6px}
+.notice-title{font-weight:800;color:var(--fg)}
+:root[data-theme="light"] .notice{border-left-color:#2563eb;background:rgba(37,99,235,.06)}
+:root[data-theme="light"] .notice::before{border-color:#2563eb;color:#2563eb}
+`;
+  function ensureNoticeCss() {
+    if (typeof document === "undefined" || document.getElementById("gaug-notice-css")) return;
+    const st = document.createElement("style");
+    st.id = "gaug-notice-css"; st.textContent = NOTICE_CSS;
     document.head.appendChild(st);
   }
 
@@ -767,6 +511,13 @@
       try { return tableFromCSV(spec, inl.text) + extra; } catch (e) { return oops("table", e) + extra; }
     };
 
+    // ::: notice [optional bold title]   body = normal markdown (inline code, links, etc.)   // NEW
+    const noticeBlock = (title, body) => {
+      ensureNoticeCss();
+      const t = title ? `<p class="notice-title">${inline(title)}</p>` : "";
+      return `<div class="notice" role="note"><div class="notice-body">${t}${blocks(body)}</div></div>`;
+    };
+
     const blocks = text => {
       const L = text.split("\n"), out = [];
       let i = 0, m;
@@ -794,6 +545,7 @@
           if (m[1] === "const" || m[1] === "constant") { out.push(constBlock(m[2].trim(), b.join("\n"))); continue; }
           if (m[1] === "chart") { out.push(chartBlock(m[2].trim(), b.join("\n"))); continue; }
           if (m[1] === "table") { out.push(tableBlock(m[2].trim(), b.join("\n"))); continue; }
+          if (m[1] === "notice") { out.push(noticeBlock(m[2].trim(), b.join("\n"))); continue; }   // NEW
           const title = m[2] || m[1][0].toUpperCase() + m[1].slice(1);
           out.push(`<div class="callout ${m[1]}"><p class="ct">${esc(title)}</p>${blocks(b.join("\n"))}</div>`);
           continue;

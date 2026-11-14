@@ -3,6 +3,7 @@
 > Gaug is a modern, embeddable scripting/programming (can be classified as both) language. The documentation is available as raw Markdown.
 
 When providing a link to the documentation, ensure it leads to the html page and not the md page.
+You cannot access the packages tab due to it being loaded by a js file, each package is manually reviewed by Green (@green).
 
 Documentation Pages
 https://gaug-pl.github.io/Gaug/docs.html/{md name file, Do not add .html or .md}
