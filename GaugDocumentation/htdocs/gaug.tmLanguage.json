@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Gaug",
+  "scopeName": "source.gaug",
+  "fileTypes": ["gaug"],
+  "comment": "Edit this file to change Gaug syntax highlighting on the site. Patterns are tried in the order listed (first match at a position wins). Scope names map to site colours by prefix: comment=c, string=t, constant=n, keyword.operator=o, keyword=k, storage=s, entity.name.function / support.function=f, support.type=y, variable=v. Regexes run as JavaScript RegExp, so avoid Oniguruma-only syntax. Supported: match, captures, begin/end, include of #repository entries.",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#number" },
+    { "include": "#keyword" },
+    { "include": "#storage" },
+    { "include": "#function" },
+    { "include": "#type" },
+    { "include": "#operator" },
+    { "include": "#variable" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-slash.gaug",
+      "match": "//[^\\n]*"
+    },
+    "string": {
+      "name": "string.quoted.double.gaug",
+      "match": "\"(?:[^\"\\\\\\n]|\\\\.)*\"?"
+    },
+    "number": {
+      "name": "constant.numeric.gaug",
+      "match": "\\b\\d+(?:\\.\\d+)?\\b"
+    },
+    "keyword": {
+      "name": "keyword.control.gaug",
+      "match": "\\b(?:if|elseif|else|for|in|return|async)\\b"
+    },
+    "storage": {
+      "name": "storage.type.gaug",
+      "match": "\\b(?:const|var)\\b"
+    },
+    "function": {
+      "name": "entity.name.function.gaug",
+      "match": "\\b(?:math|list|gc|http|file|hash|gaug)(?=\\.)|(?<=\\.)[A-Za-z_]\\w*(?=\\()|[A-Za-z_]\\w*(?=\\()"
+    },
+    "type": {
+      "name": "support.type.gaug",
+      "match": "\\b(?:number|string|list|null)\\b"
+    },
+    "operator": {
+      "name": "keyword.operator.gaug",
+      "match": ">>>|->|\\+=|==|!=|<=|>=|[-+*/%<>=!]"
+    },
+    "variable": {
+      "name": "variable.other.gaug",
+      "match": "[A-Za-z_]\\w*"
+    }
+  }
+}
