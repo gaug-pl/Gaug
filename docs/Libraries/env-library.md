@@ -1,11 +1,7 @@
 # env Library
 
-::: notice
-This library must be first fetched with `get gauglib env`.
-:::
-
 ::: warning
-This feature is still in progress and is not complete.
+**You need to fetch this Library using** `get gauglib env`**.**
 :::
 
 ::: fn env.load
