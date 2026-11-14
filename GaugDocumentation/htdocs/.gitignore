@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Private server data
+server/data/
+**/admin.json
+**/db.json
+
+# Local credential generator
+generate-admin.js
+
+# Logs
+*.log

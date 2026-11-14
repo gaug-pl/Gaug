@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Not found · Gaug</title>
+<script>
+// GitHub Pages is static, so /Gaug/packages/users/1 has no file behind it and lands here.
+// Send it to the packages page, which draws the profile from the hash.
+(function () {
+  var m = location.pathname.match(/^(.*\/)packages\/users\/([^\/]+)\/?$/);
+  if (m) location.replace(m[1] + "packages.html#/users/" + m[2]);
+})();
+</script>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#000;color:#fff;font-family:system-ui,sans-serif;text-align:center}a{color:#52d017}</style>
+</head><body><div><h1>Page not found</h1><p><a href="/Gaug/">Back to Gaug</a></p></div></body></html>
