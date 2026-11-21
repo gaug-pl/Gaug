@@ -3,6 +3,7 @@
 //
 //   node server/add-admin.js <username>      add an admin (prompts for password twice)
 //   node server/add-admin.js list            list admin accounts
+//   node server/add-admin.js reset <name>    reset an admin's password
 //   node server/add-admin.js remove <name>   remove an admin account
 //
 // Requires DATABASE_URL (same as server.js). Passwords are scrypt-hashed with
@@ -53,6 +54,27 @@ async function writeStore(pool, db) {
   );
 }
 
+async function promptPassword(username) {
+  const a = await ask(`New password for ${username} (12-128 chars): `);
+  if (a.length < 12 || a.length > 128) { console.error("Must be 12-128 characters."); process.exit(1); }
+  const b = await ask("Repeat password: ");
+  if (a !== b) { console.error("Passwords do not match."); process.exit(1); }
+  const saltBytes = crypto.randomBytes(16);
+  const hash = crypto.scryptSync(a, saltBytes, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  return { salt: saltBytes.toString("hex"), hash: hash.toString("hex") };
+}
+
+async function resetAdmin(pool, username) {
+  const ln = username.toLowerCase();
+  const db = await readStore(pool);
+  const adm = db.admins[ln];
+  if (!adm) { console.error(`'${username}' is not an admin.`); process.exit(1); }
+  const creds = await promptPassword(username);
+  adm.salt = creds.salt; adm.hash = creds.hash;
+  await writeStore(pool, db);
+  console.log(`Password for admin '${username}' reset. Existing sessions for this account are unaffected.`);
+}
+
 async function addAdmin(pool, username) {
   if (!USER_RE.test(username)) {
     console.error("Username must be 3-20 letters, numbers or underscores.");
@@ -68,14 +90,8 @@ async function addAdmin(pool, username) {
   if (db.users[ln]) { console.error(`'${username}' is already a registered user. Delete that user first.`); process.exit(1); }
   if (db.admins[ln]) { console.error(`'${username}' is already an admin.`); process.exit(1); }
 
-  const a = await ask(`New password for ${username} (12-128 chars): `);
-  if (a.length < 12 || a.length > 128) { console.error("Must be 12-128 characters."); process.exit(1); }
-  const b = await ask("Repeat password: ");
-  if (a !== b) { console.error("Passwords do not match."); process.exit(1); }
-
-  const saltBytes = crypto.randomBytes(16);
-  const hash = crypto.scryptSync(a, saltBytes, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
-  db.admins[ln] = { name: username, salt: saltBytes.toString("hex"), hash: hash.toString("hex"), id: db.nextId++ };
+  const creds = await promptPassword(username);
+  db.admins[ln] = { name: username, salt: creds.salt, hash: creds.hash, id: db.nextId++ };
   await writeStore(pool, db);
   console.log(`Admin '${username}' added (profile #${db.admins[ln].id}). They can log in right away.`);
 }
@@ -109,11 +125,13 @@ async function removeAdmin(pool, username) {
   try {
     if (cmd === "list") await listAdmins(pool);
     else if (cmd === "remove" && arg) await removeAdmin(pool, arg);
-    else if (cmd && cmd !== "list" && cmd !== "remove") await addAdmin(pool, cmd);
+    else if (cmd === "reset" && arg) await resetAdmin(pool, arg);
+    else if (cmd && cmd !== "list" && cmd !== "remove" && cmd !== "reset") await addAdmin(pool, cmd);
     else {
       console.log("Usage:");
       console.log("  node server/add-admin.js <username>      add an admin");
       console.log("  node server/add-admin.js list            list admins");
+      console.log("  node server/add-admin.js reset <name>    reset an admin's password");
       console.log("  node server/add-admin.js remove <name>   remove an admin");
       process.exitCode = 1;
     }

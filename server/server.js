@@ -322,7 +322,12 @@ function newSession(res, ln, name, role) {
 function getSession(req) {
   const c = (req.headers.cookie || "").split(/;\s*/).find(x => x.startsWith(SID + "="));
   if (!c) return null;
-  const k = sha(c.slice(SID.length + 1)), s = sessions.get(k);
+  const k = sha(c.slice(SID.length + 1));
+  let s = sessions.get(k);
+  if (!s && db.sessions[k]) {   // sessions written directly to the store (scripts) hot-load here
+    s = db.sessions[k];
+    if (s && s.exp > Date.now()) sessions.set(k, s);
+  }
   if (!s || s.exp < Date.now() || (db.users[s.ln] && db.users[s.ln].banned) ||
       (s.role === "admin" && !isAdminLn(s.ln))) { dropSession(k); return null; }
   return { ...s, k };
