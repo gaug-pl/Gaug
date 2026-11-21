@@ -1,56 +1,528 @@
+
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Gaug",
   "scopeName": "source.gaug",
-  "fileTypes": ["gaug"],
-  "comment": "Edit this file to change Gaug syntax highlighting on the site. Patterns are tried in the order listed (first match at a position wins). Scope names map to site colours by prefix: comment=c, string=t, constant=n, keyword.operator=o, keyword=k, storage=s, entity.name.function / support.function=f, support.type=y, variable=v. Regexes run as JavaScript RegExp, so avoid Oniguruma-only syntax. Supported: match, captures, begin/end, include of #repository entries.",
   "patterns": [
-    { "include": "#comment" },
-    { "include": "#string" },
-    { "include": "#number" },
-    { "include": "#keyword" },
-    { "include": "#storage" },
-    { "include": "#function" },
-    { "include": "#type" },
-    { "include": "#operator" },
-    { "include": "#variable" }
-  ],
+  { "include": "#comments" },
+  { "include": "#strings" },
+  { "include": "#directives" },
+  { "include": "#declaration-headers" },
+  { "include": "#declarations" },
+  { "include": "#imports" },
+  { "include": "#member-access" },
+  { "include": "#contextual-keywords" },
+  { "include": "#keywords" },
+  { "include": "#types" },
+  { "include": "#function-calls" },
+  { "include": "#constants" },
+  { "include": "#operators" },
+  { "include": "#numbers" },
+  { "include": "#punctuation" }
+],
   "repository": {
-    "comment": {
-      "name": "comment.line.double-slash.gaug",
-      "match": "//[^\\n]*"
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.gaug",
+          "begin": "##",
+          "end": "##"
+        },
+        {
+          "name": "comment.line.number-sign.gaug",
+          "match": "#(?!#).*$"
+        }
+      ]
     },
-    "string": {
-      "name": "string.quoted.double.gaug",
-      "match": "\"(?:[^\"\\\\\\n]|\\\\.)*\"?"
+
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.gaug",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.gaug",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.gaug",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.gaug",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
     },
-    "number": {
-      "name": "constant.numeric.gaug",
-      "match": "\\b\\d+(?:\\.\\d+)?\\b"
+
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.control.directive.gaug",
+          "match": "^\\s*(!typechecker)\\b"
+        }
+      ]
     },
-    "keyword": {
-      "name": "keyword.control.gaug",
-      "match": "\\b(?:if|elseif|else|for|in|return|async)\\b"
+
+    "declaration-headers": {
+      "patterns": [
+        {
+          "name": "meta.class.declaration.gaug",
+          "match": "\\b(class)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.class.gaug"
+            },
+            "2": {
+              "name": "entity.name.class.gaug"
+            }
+          }
+        },
+        {
+          "name": "meta.type.declaration.gaug",
+          "match": "\\b(type)\\s+(new|modify)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.type.gaug"
+            },
+            "2": {
+              "name": "keyword.control.type-modifier.gaug"
+            },
+            "3": {
+              "name": "entity.name.type.gaug"
+            }
+          }
+        },
+        {
+          "name": "meta.function.declaration.gaug",
+          "begin": "\\b(func)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.declaration.function.gaug"
+            },
+            "2": {
+              "name": "entity.name.function.gaug"
+            },
+            "3": {
+              "name": "punctuation.section.parameters.begin.gaug"
+            }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.parameters.end.gaug"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "name": "meta.parameter.typed.gaug",
+              "match": "([A-Za-z_][A-Za-z0-9_]*)(\\s*)(:)(\\s*)([A-Za-z_][A-Za-z0-9_]*)",
+              "captures": {
+                "1": {
+                  "name": "variable.parameter.gaug"
+                },
+                "3": {
+                  "name": "punctuation.separator.type.gaug"
+                },
+                "5": {
+                  "name": "storage.type.annotation.gaug"
+                }
+              }
+            },
+            {
+              "name": "variable.parameter.gaug",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*(?:,|\\)))"
+            },
+            {
+              "name": "keyword.operator.variadic.gaug",
+              "match": "\\.\\.\\."
+            },
+            {
+              "name": "punctuation.separator.parameters.gaug",
+              "match": ","
+            }
+          ]
+        },
+        {
+          "name": "meta.function.declaration.shorthand.gaug",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\([^\\n)]*\\)\\s*->)",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.gaug"
+            }
+          }
+        }
+      ]
     },
-    "storage": {
-      "name": "storage.type.gaug",
-      "match": "\\b(?:const|var)\\b"
+
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.variable.declaration.gaug",
+          "match": "\\b(var|const)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.variable.gaug"
+            },
+            "2": {
+              "name": "variable.other.declaration.gaug"
+            }
+          }
+        },
+        {
+          "name": "meta.class.visibility.gaug",
+          "match": "\\b(private|global|cmethod|export)\\b",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.visibility.gaug"
+            }
+          }
+        },
+        {
+          "name": "meta.class.method.declaration.gaug",
+          "match": "\\b(this)(\\.)(onCall)\\b",
+          "captures": {
+            "1": {
+              "name": "variable.language.this.gaug"
+            },
+            "2": {
+              "name": "punctuation.accessor.gaug"
+            },
+            "3": {
+              "name": "entity.name.function.gaug"
+            }
+          }
+        }
+      ]
     },
-    "function": {
-      "name": "entity.name.function.gaug",
-      "match": "\\b(?:math|list|gc|http|file|hash|gaug)(?=\\.)|(?<=\\.)[A-Za-z_]\\w*(?=\\()|[A-Za-z_]\\w*(?=\\()"
+
+    "imports": {
+      "patterns": [
+        {
+          "name": "meta.import.gaug",
+          "match": "\\b(get)\\s+((?:gauglib\\s+)?(?:\"[^\"\\n]*\"|'[^'\\n]*'))\\s+(as)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.import.gaug"
+            },
+            "2": {
+              "name": "string.quoted.module-path.gaug"
+            },
+            "3": {
+              "name": "keyword.control.import.as.gaug"
+            },
+            "4": {
+              "name": "entity.name.namespace.gaug"
+            }
+          }
+        },
+        {
+          "name": "keyword.control.import.gaug",
+          "match": "\\b(gauglib|as)\\b"
+        }
+      ]
     },
-    "type": {
-      "name": "support.type.gaug",
-      "match": "\\b(?:number|string|list|null)\\b"
+
+    "contextual-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.declaration.gaug",
+          "match": "\\b(class|func|type|get)\\b"
+        },
+        {
+          "name": "keyword.control.exception.gaug",
+          "match": "\\b(attempt|except|success)\\b"
+        },
+        {
+          "name": "keyword.control.defer.gaug",
+          "match": "\\b(defer)\\b"
+        },
+        {
+          "name": "keyword.control.loop-label.gaug",
+          "match": "\\b(lab)\\b"
+        },
+        {
+          "name": "keyword.control.type-modifier.gaug",
+          "match": "\\b(new|modify)\\b"
+        },
+        {
+          "name": "keyword.other.visibility.gaug",
+          "match": "\\b(private|global)\\b"
+        },
+        {
+          "name": "keyword.other.enum.gaug",
+          "match": "\\b(enum|errors)\\b"
+        }
+      ]
     },
-    "operator": {
-      "name": "keyword.operator.gaug",
-      "match": ">>>|->|\\+=|==|!=|<=|>=|[-+*/%<>=!]"
+
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.gaug",
+          "match": "\\b(if|elseif|else|while|for|in|return|break|continue|yield)\\b"
+        },
+        {
+          "name": "keyword.control.concurrent.gaug",
+          "match": "\\b(async|await)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.gaug",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "name": "keyword.declaration.variable.gaug",
+          "match": "\\b(var|const)\\b"
+        },
+        {
+          "name": "keyword.control.switch.gaug",
+          "match": "\\b(switch|case|default)\\b"
+        }
+      ]
     },
-    "variable": {
-      "name": "variable.other.gaug",
-      "match": "[A-Za-z_]\\w*"
+
+		"this-member-access": {
+  "patterns": [
+    {
+      "name": "meta.this.member.call.gaug",
+      "match": "\\b(this)(\\.)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "variable.language.this.gaug"
+        },
+        "2": {
+          "name": "punctuation.accessor.gaug"
+        },
+        "3": {
+          "name": "entity.name.function.member.gaug"
+        }
+      }
+    },
+    {
+      "name": "meta.this.member.property.gaug",
+      "match": "\\b(this)(\\.)([A-Za-z_][A-Za-z0-9_]*)(?!\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "variable.language.this.gaug"
+        },
+        "2": {
+          "name": "punctuation.accessor.gaug"
+        },
+        "3": {
+          "name": "variable.other.property.gaug"
+        }
+      }
+    }
+  ]
+},
+
+"library-member-access": {
+  "patterns": [
+    {
+      "name": "meta.library.function.gaug",
+      "match": "\\b(math|file|gaug)(\\.)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "support.module.gaug"
+        },
+        "2": {
+          "name": "punctuation.accessor.gaug"
+        },
+        "3": {
+          "name": "support.function.library.gaug"
+        }
+      }
+    },
+    {
+      "name": "meta.library.property.gaug",
+      "match": "\\b(math|file|gaug)(\\.)([A-Za-z_][A-Za-z0-9_]*)(?!\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "support.module.gaug"
+        },
+        "2": {
+          "name": "punctuation.accessor.gaug"
+        },
+        "3": {
+          "name": "support.constant.library.gaug"
+        }
+      }
+    }
+  ]
+},
+
+"library-namespaces": {
+  "patterns": [
+    {
+      "name": "support.module.gaug",
+      "match": "\\b(math|file|gaug)\\b"
+    }
+  ]
+},
+
+    "types": {
+      "patterns": [
+        {
+          "name": "meta.type.annotation.gaug",
+          "match": "(>>>|:)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.type.gaug"
+            },
+            "2": {
+              "name": "storage.type.annotation.gaug"
+            }
+          }
+        },
+        {
+          "name": "entity.name.type.gaug",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*>>>\\s*\\{)"
+        }
+      ]
+    },
+
+    
+"member-access": {
+  "patterns": [
+    {
+      "name": "variable.other.object.gaug",
+      "match": "\\b(?!this\\b)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\.)"
+    },
+    {
+      "name": "meta.member.function.gaug",
+      "match": "(\\.)(\\s*)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "punctuation.accessor.gaug"
+        },
+        "3": {
+          "name": "entity.name.function.member.gaug"
+        }
+      }
+    },
+    {
+      "name": "meta.member.property.gaug",
+      "match": "(\\.)(\\s*)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.accessor.gaug"
+        },
+        "3": {
+          "name": "variable.other.property.gaug"
+        }
+      }
+    }
+  ]
+},
+    "function-calls": {
+      "patterns": [
+        {
+          "name": "meta.function-call.gaug",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.call.gaug"
+            }
+          }
+        }
+      ]
+    },
+
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.gaug",
+          "match": "\\b(true|false|null)\\b"
+        },
+        {
+          "name": "variable.language.this.gaug",
+          "match": "\\bthis\\b"
+        }
+      ]
+    },
+
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.type.gaug",
+          "match": ">>>"
+        },
+        {
+          "name": "keyword.operator.assignment.gaug",
+          "match": "(\\+=|-=|=)"
+        },
+        {
+          "name": "keyword.operator.comparison.gaug",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.gaug",
+          "match": "[+*/%-]"
+        },
+        {
+          "name": "keyword.operator.arrow.gaug",
+          "match": "->"
+        },
+        {
+          "name": "punctuation.accessor.gaug",
+          "match": "::"
+        },
+        {
+          "name": "keyword.operator.variadic.gaug",
+          "match": "\\.\\.\\."
+        }
+      ]
+    },
+
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.gaug",
+          "match": "\\b[0-9]+(?:\\.[0-9]+)?\\b"
+        }
+      ]
+    },
+
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.section.group.begin.gaug",
+          "match": "[({\\[]"
+        },
+        {
+          "name": "punctuation.section.group.end.gaug",
+          "match": "[)}\\]]"
+        },
+        {
+          "name": "punctuation.separator.gaug",
+          "match": "[,;]"
+        },
+        {
+          "name": "punctuation.accessor.gaug",
+          "match": "\\."
+        },
+        {
+          "name": "punctuation.separator.type.gaug",
+          "match": ":"
+        },
+        {
+          "name": "punctuation.separator.modifier.gaug",
+          "match": "%"
+        }
+      ]
     }
   }
 }

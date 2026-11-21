@@ -18,29 +18,29 @@ func f() -> (
 attempt f();
 ```
 
-To handle errors or exceptions, you need to add `%except` next to the last closing bracket.
+To handle errors or exceptions, you need to add `except` next to the last closing bracket.
 ```gaug
 attempt () -> (
     # code here.
-) %except -> ( 
+) except(e: string) -> (  # e is the error
     # code here
 );
 ```
 
-To actually fetch the error, you need to add `*name >>> string*` next to except.
+To only check if one error happens, provide the error `enum` next to except.
 ```gaug
 attempt () -> (
     # code here.
-) %except *error >>> string* -> ( 
-    print(error);
+) except enum.errors.RUNTIME_ERROR () -> (
+    # code here
 );
 ```
 
-When attempt successfully finishes running. It will run `%success` (if passed.)
+When attempt successfully finishes running. It will run `success` (if passed.)
 ```gaug
 attempt () -> (
     print("Hello World!");
-) %success -> (
+) success() -> (
     print("Success!");
 );
 

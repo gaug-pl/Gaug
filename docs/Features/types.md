@@ -155,10 +155,10 @@ type new Inventory = {
 To create a new type however, you can use `type new` or `type modify` if you would like to modify an already existing custom type.
 
 ```gaug
-type new Player = {
+type new Player -> (
     Name >>> string;
     ID >>> number;
-};
+);
 
 var Player >>> Player = {};
 Player<"Name"> = "Player1";
@@ -173,4 +173,21 @@ Player<"Inventory"> = {
     "Item1",
     "Item2",
 };
+```
+
+You can add attributes to types as well, like the `required` attribute, or `deprecated` attribute.
+Or, you can choose if variables are global or private (only applies for classes)
+```gaug
+type new NewType -> (
+    func HelloWorld() -> () @[
+        deprecated = "HelloWorld2",
+    ];
+    func HelloWorld2() -> () @[required = true],
+
+    global const hi >>> string;
+    
+    test >>> string; # can be global, private, const or var
+    var test2 >>> string; # now it cant be a const, since its specified as var
+    
+);
 ```

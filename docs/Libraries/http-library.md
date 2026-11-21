@@ -45,12 +45,12 @@ sendRequest();
 param url: string - The URL to send the GET request to.
 param headers?: dict - Headers metadata to send to the server.
 
-> Sends a GET request to the passed URL.
+> Template
 
 ```gaug
 
 func sendRequest() -> (
-    var Response = http.get("https://example.com");
+    var Response = http.template("https://example.com");
 
     print(Response);
 );

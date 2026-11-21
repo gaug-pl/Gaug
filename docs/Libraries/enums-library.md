@@ -5,10 +5,12 @@ This feature is still in progress and is not complete.
 :::
 
 ## Error enums
-Error enums can be used in conjuction with the `error()` fbuiltin.
+Error enums can be used in conjuction with the `error()` and `assert()` fbuiltin.
 
 ::: const errors.RUNTIME_ERROR
 type enum
+
+Runtime Error
 :::
 
 ::: const errors.TYPE_ERROR

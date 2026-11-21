@@ -21,19 +21,9 @@
           "file": "Main/whyGaug.md"
         },
         {
-          "text": "What is Gaug?",
-          "link": "/gaug",
-          "file": "Main/gaug.md"
-        },
-        {
-          "text": "License",
-          "link": "/license",
-          "file": "license.md"
-        },
-        {
-          "text": "Installation",
-          "link": "/installation",
-          "file": "installation.md"
+          "text": "Getting Started",
+          "link": "/gettingStarted",
+          "file": "Main/GettingStarted.md"
         }
       ]
     },
@@ -144,6 +134,16 @@
           "text": "Asynchronous Function Calls",
           "link": "/asyncCall",
           "file": "AdvancedFeatures/asyncCall.md"
+        }
+      ]
+    },
+    {
+      "text": "License",
+      "items": [
+        {
+          "text": "License",
+          "link": "/license",
+          "file": "license.md"
         }
       ]
     }

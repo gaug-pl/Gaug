@@ -77,6 +77,7 @@ async function initializeStorage() {
     initialDb.pending ||= {};
     initialDb.profiles ||= {};
     initialDb.bans ||= {};
+    initialDb.admins ||= {};
 
     await pool.query(
       `INSERT INTO gaug_storage (id, data)
@@ -103,10 +104,13 @@ async function initializeStorage() {
   db.pending ||= {};
   db.profiles ||= {};
   db.bans ||= {};
+  db.admins ||= {};
 
-  // Logins survive restarts and redeploys: sessions are kept in the database (only hashed tokens).
+  // Logins survive restarts and redeploys: sessions are kept in the database
+  // (only hashed tokens). Sessions no longer expire — a login stays valid
+  // until logout or a ban.
   db.sessions ||= {};
-  for (const [k, v] of Object.entries(db.sessions)) { if (v.exp > Date.now()) sessions.set(k, v); else delete db.sessions[k]; }
+  for (const [k, v] of Object.entries(db.sessions)) { v.exp = Date.now() + SESSION_TTL; sessions.set(k, v); }
 
   // Public profile numbers: Green is always #1, everyone else gets the next free number in sign-up order.
   db.nextId ||= 2;
@@ -294,17 +298,18 @@ const bump = key => { const h = hits.get(key); if (h) h.n++; };
 const clearKey = key => hits.delete(key);
 
 /* ---------- sessions ---------- */
+const SESSION_TTL = 200 * 365 * 86400e3;   // ~200 years: logins effectively never expire
+const SESSION_COOKIE_MAX_AGE = 400 * 86400; // browsers cap cookie lifetime at ~400 days
 const sessions = new Map();
 const dropSession = k => { sessions.delete(k); delete db.sessions[k]; };
 
 function newSession(res, ln, name, role) {
   const tok = crypto.randomBytes(32).toString("hex");
-  const ttl = role === "admin" ? 2 * 3600e3 : 7 * 24 * 3600e3;
-  const key = sha(tok), rec = { ln, name, role, exp: Date.now() + ttl };
+  const key = sha(tok), rec = { ln, name, role, exp: Date.now() + SESSION_TTL };
   sessions.set(key, rec); db.sessions[key] = rec;
   save().catch(e => console.error("Could not save session:", e.message));
 
-  return `${SID}=${tok}; HttpOnly; SameSite=None; Path=/; Max-Age=${ttl / 1000}; Secure`;
+  return `${SID}=${tok}; HttpOnly; SameSite=None; Path=/; Max-Age=${SESSION_COOKIE_MAX_AGE}; Secure`;
 }
 
 function getSession(req) {
@@ -363,22 +368,26 @@ function sameOrigin(req) {
 
 /* ---------- public profiles ---------- */
 const bannedOwner = ln => { const u = own(db.users, ln); return !!(u && u.banned); };   // banned users disappear from public pages
-const ownerId = ln => ln === "green" ? 1 : (own(db.users, ln) || {}).id || null;
+const isAdminOwner = ln => ln === "green" || !!own(db.admins, ln);   // "Verified/admin" badge on packages
+const ownerId = ln => ln === "green" ? 1 : ((own(db.admins, ln) || own(db.users, ln) || {}).id || null);
 function findUser(ref) {   // ref is a profile number ("1") or a username
   if (/^\d{1,9}$/.test(ref)) {
     const id = +ref;
     if (id === 1) return { ln: "green", name: "Green", role: "admin", id: 1 };
     for (const [ln, u] of Object.entries(db.users)) if (u.id === id) return { ln, name: u.name, role: "user", id, banned: u.banned };
+    for (const [ln, a] of Object.entries(db.admins)) if (a.id === id) return { ln, name: a.name, role: "admin", id };
     return null;
   }
   const ln = ref.toLowerCase();
   if (ln === "green") return { ln, name: "Green", role: "admin", id: 1 };
+  const adm = own(db.admins, ln);
+  if (adm) return { ln, name: adm.name, role: "admin", id: adm.id };
   const u = own(db.users, ln);
   return u ? { ln, name: u.name, role: "user", id: u.id, banned: u.banned } : null;
 }
 
 /* ---------- submission helpers ---------- */
-const brief = p => ({ id: p.id, name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, status: p.status, reason: p.reason || "", at: p.at, files: p.fileCount, flags: p.flagCount, tags: p.tags || [], adminAuthor: p.owner === "green" });
+const brief = p => ({ id: p.id, name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, status: p.status, reason: p.reason || "", at: p.at, files: p.fileCount, flags: p.flagCount, tags: p.tags || [], adminAuthor: isAdminOwner(p.owner) });
 function prune() {   // decided submissions disappear after 30 days
   const cut = Date.now() - 30 * 86400e3; let ch = false;
   for (const [id, p] of Object.entries(db.pending)) if (p.status !== "pending" && p.at < cut) { delete db.pending[id]; ch = true; }
@@ -392,7 +401,7 @@ async function api(req, res, url) {
     if (!sameOrigin(req)) return fail(res, 403, "Cross-site request blocked");
     if (!/^application\/json/.test(req.headers["content-type"] || "") && m !== "DELETE" && !(m === "POST" && parts[0] === "submissions" && parts[2])) return fail(res, 415, "JSON only");
   }
-  const s = getSession(req), who = s && { name: s.name, role: s.role, id: s.ln === "green" ? 1 : (db.users[s.ln] || {}).id };
+  const s = getSession(req), who = s && { name: s.name, role: s.role, id: ownerId(s.ln) };
   const route = parts[0];
 
   if (route === "me" && m === "GET") return send(res, 200, { user: who, bio: s ? (own(db.profiles, s.ln) || {}).bio || "" : "", avatar: s ? (own(db.profiles, s.ln) || {}).avatarAt || 0 : 0, registration: REGISTRATION, licenses: LICENSES, tags: TAGS });
@@ -410,12 +419,12 @@ async function api(req, res, url) {
     const u = b.username, p = b.password;
     if (typeof u !== "string" || !USER_RE.test(u)) return fail(res, 400, "Username: 3-20 letters, numbers or underscores");
     if (typeof p !== "string" || p.length < 10 || p.length > 128) return fail(res, 400, "Password must be 10-128 characters");
-    if (isReserved(u) || db.users[u.toLowerCase()]) return fail(res, 409, "That username is not available");
+    if (isReserved(u) || db.users[u.toLowerCase()] || own(db.admins, u.toLowerCase())) return fail(res, 409, "That username is not available");
     if (Object.keys(db.users).length >= 5000) return fail(res, 503, "Registration is full");
     bump("reg|" + a);
     const salt = crypto.randomBytes(16).toString("hex"), hash = (await hashPw(p, salt)).toString("hex");
     const ln = u.toLowerCase();
-    if (db.users[ln]) return fail(res, 409, "That username is not available");
+    if (db.users[ln] || own(db.admins, ln)) return fail(res, 409, "That username is not available");
     db.users[ln] = { name: u, salt, hash, lastIp: a, id: db.nextId++ }; await save();
     return send(res, 200, { user: { name: u, role: "user" } }, { "Set-Cookie": newSession(res, ln, u, "user") });
   }
@@ -425,10 +434,12 @@ async function api(req, res, url) {
     if (b instanceof Error) return fail(res, 400, b.message);
     const u = typeof b.username === "string" ? b.username.slice(0, 20) : "", p = typeof b.password === "string" ? b.password.slice(0, 128) : "";
     const ln = u.toLowerCase(), kIp = "li|" + a, kAcc = "la|" + ln;
-    const isAdmin = ln === "green";
+    const adm = own(db.admins, ln);
+    const isAdmin = ln === "green" || !!adm;
     if (limited(kIp, 10, 15 * 60e3) || limited(kAcc, isAdmin ? 8 : 20, 15 * 60e3)) return fail(res, 429, "Too many attempts. Try again in 15 minutes.");
     let rec = null;
-    if (isAdmin) { const ad = readAdmin(); if (ad) rec = { name: "Green", role: "admin", salt: ad.salt, hash: ad.hash }; }
+    if (ln === "green") { const ad = readAdmin(); if (ad) rec = { name: "Green", role: "admin", salt: ad.salt, hash: ad.hash }; }
+    else if (adm) rec = { name: adm.name, role: "admin", salt: adm.salt, hash: adm.hash };
     else if (Object.prototype.hasOwnProperty.call(db.users, ln)) rec = { ...db.users[ln], role: "user" };
     const h = await hashPw(p, rec ? rec.salt : DUMMY_SALT);
     const ok = !!rec && crypto.timingSafeEqual(h, Buffer.from(rec.hash, "hex"));
@@ -482,7 +493,7 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
     if (!u || u.banned) return fail(res, 404, "Not found");
     const pr = own(db.profiles, u.ln) || {};
     const pk = Object.values(db.packages).filter(p => p.owner === u.ln).map(({ name, version, description, license, author, owner, files, code, tags, verified }) =>
-      ({ name, version, description, license, author, tags: tags || [], verified: !!verified, adminAuthor: owner === "green", mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length }));
+      ({ name, version, description, license, author, tags: tags || [], verified: !!verified, adminAuthor: isAdminOwner(owner), mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length }));
     return send(res, 200, { profile: { id: u.id, name: u.name, role: u.role, bio: pr.bio || "", avatar: pr.avatarAt || 0, packages: pk } });
   }
 
@@ -500,7 +511,7 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
   if (route === "packages") {
     const name = parts[1];
     if (m === "GET" && !name) {
-      return send(res, 200, { packages: Object.values(db.packages).filter(p => !bannedOwner(p.owner) || (s && s.role === "admin")).map(({ name, version, description, license, author, owner, files, code, tags, verified }) => ({ name, version, description, license, author, tags: tags || [], verified: !!verified, adminAuthor: owner === "green", mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length })) });
+      return send(res, 200, { packages: Object.values(db.packages).filter(p => !bannedOwner(p.owner) || (s && s.role === "admin")).map(({ name, version, description, license, author, owner, files, code, tags, verified }) => ({ name, version, description, license, author, tags: tags || [], verified: !!verified, adminAuthor: isAdminOwner(owner), mine: !!s && owner === s.ln, files: Object.keys(files || { m: code }).length })) });
     }
     if (m === "GET" && name && parts[2] === "download") {   // public, like the package list
       const p = own(db.packages, name);
@@ -513,7 +524,7 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
       const p = own(db.packages, name);
       if (!p || (bannedOwner(p.owner) && !(s && s.role === "admin"))) return fail(res, 404, "Not found");
       const files = p.files || { "main.gaug": p.code || "" };
-      return send(res, 200, { package: { name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, adminAuthor: p.owner === "green", authorId: ownerId(p.owner), tags: p.tags || [], verified: !!p.verified, mine: !!s && p.owner === s.ln, zipSize: buildZip(files, p.name).length, files } });
+      return send(res, 200, { package: { name: p.name, version: p.version, description: p.description, license: p.license, author: p.author, adminAuthor: isAdminOwner(p.owner), authorId: ownerId(p.owner), tags: p.tags || [], verified: !!p.verified, mine: !!s && p.owner === s.ln, zipSize: buildZip(files, p.name).length, files } });
     }
     if (m === "POST" && name && parts[2] === "verified") {   // admin: toggle the "Verified by Gaug" mark on a published package
       if (s.role !== "admin") return fail(res, 403, "Not allowed");
@@ -581,7 +592,7 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
       if (action === "approve") {
         const ex = own(db.packages, p.name);
         if (ex && ex.owner !== p.owner) return fail(res, 409, "That name now belongs to another user");
-        if (ex && p.owner !== "green" && cmpVer(p.version, ex.version) <= 0) return fail(res, 409, `Version ${ex.version} or newer is already published. Reject this one.`);
+        if (ex && !isAdminOwner(p.owner) && cmpVer(p.version, ex.version) <= 0) return fail(res, 409, `Version ${ex.version} or newer is already published. Reject this one.`);
         const ab = await readJson(req).catch(() => ({}));   // { verified } from the review page; a new version starts unverified unless ticked
         db.packages[p.name] = { name: p.name, version: p.version, description: p.description, license: p.license, tags: p.tags || [], verified: ab.verified === true, files: p.files, code: p.files["main.gaug"] || "", owner: p.owner, author: ex ? ex.author : p.author };
         p.status = "approved";
@@ -606,7 +617,10 @@ if (!s && !isPublicPackageRead && !isPublicProfileRead) {
     if (route === "users" && m === "GET") {
       const cnt = {}; for (const p of Object.values(db.packages)) cnt[p.owner] = (cnt[p.owner] || 0) + 1;
       return send(res, 200, {
-        users: Object.entries(db.users).map(([ln, u]) => ({ id: u.id, name: u.name, banned: u.banned || null, ip: u.lastIp || "", packages: cnt[ln] || 0 })),
+        users: [
+          ...Object.entries(db.users).map(([ln, u]) => ({ id: u.id, name: u.name, banned: u.banned || null, ip: u.lastIp || "", packages: cnt[ln] || 0 })),
+          ...Object.entries(db.admins).map(([ln, a]) => ({ id: a.id, name: a.name, banned: null, ip: "", packages: cnt[ln] || 0, admin: true })),
+        ],
         ips: Object.entries(db.bans).map(([a, b]) => ({ ip: a, ...b })),
       });
     }

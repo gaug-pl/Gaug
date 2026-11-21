@@ -1,0 +1,127 @@
+/* ==========================================================================
+   Gaug home page (index.html only). Loaded after style.css and scoped to
+   body.home, so docs.html and installations.html are not affected.
+   ========================================================================== */
+
+/* ---------- Top bar: logo size comes from style.css (64px, same as every page) ---------- */
+
+/* ---------- Frame ---------- */
+.wrap { max-width: var(--page); margin: 0 auto; padding: 0 var(--gutter); }
+.home main { display: block; max-width: none; min-height: 0; margin: 0; padding: var(--nav-h) 0 0; gap: 0; }
+.band { padding: clamp(88px, 12vw, 176px) 0; }
+.band h2 {
+  margin: 0; max-width: 18em;
+  font-size: clamp(2.5rem, 1.5rem + 4vw, 5rem);
+  line-height: .98; letter-spacing: -.045em; font-weight: 800; text-wrap: balance;
+}
+
+/* ---------- Hero ---------- */
+.hero {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end;
+  gap: clamp(32px, 5vw, 80px);
+  padding-top: clamp(40px, 7vw, 96px); padding-bottom: 56px;
+}
+.home .hero h1 {
+  margin: 0 0 .05em;
+  font-size: clamp(7rem, 21vw, 19rem);
+  line-height: .8; letter-spacing: -.055em;
+}
+.hero-side { max-width: 27rem; padding-bottom: .6vw; }
+.home .lede { max-width: none; margin: 0 0 32px; font-size: var(--step-lead); }
+
+/* ---------- Playground, the live thing ---------- */
+.stage { padding-bottom: 0; }
+.home .ed { height: min(480px, 64svh); }
+
+/* ---------- Tour ---------- */
+.tour .statement { max-width: 34em; margin: 28px 0 0; color: var(--body); font-size: var(--step-lead); line-height: 1.45; }
+.rows { display: grid; gap: clamp(56px, 7vw, 96px); margin-top: clamp(56px, 8vw, 112px); }
+.row { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(28px, 5vw, 80px); align-items: start; }
+.row h3 { margin: 0 0 12px; font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem); line-height: 1.1; letter-spacing: -.025em; font-weight: 800; }
+.row p { margin: 0; max-width: 34em; color: var(--body); font-size: var(--step-body); line-height: 1.65; }
+.home code { padding: 1px 6px; border-radius: 6px; background: var(--surface-2); color: var(--fg); font: 400 .88em var(--mono); }
+
+pre.snip {
+  margin: 0; padding: 22px 26px; overflow-x: auto;
+  border-radius: var(--r-l); background: var(--code-bg); color: var(--code-ink);
+  font: 400 15px/1.7 var(--mono); tab-size: 4;
+}
+pre.snip code { padding: 0; background: none; color: inherit; font: inherit; }
+
+/* ---------- How it runs (tone step, no lines) ---------- */
+.run { background: var(--surface); }
+.run .snip { background: var(--code-out); }
+.run-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(28px, 5vw, 80px); align-items: start; margin-top: clamp(48px, 7vw, 96px); }
+.run-text p { margin: 0 0 20px; max-width: 34em; color: var(--body); font-size: var(--step-lead); line-height: 1.5; }
+.run-text p:last-child { margin: 0; }
+.run-text code { font-size: .8em; }
+.run-code { display: grid; gap: 12px; }
+
+/* ---------- Closing field ---------- */
+.cta { background: var(--green); color: var(--on-green); }
+.cta-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 40px; }
+.cta h2 { max-width: 10em; }
+.btn.dark { background: #0a0a0a; color: #fff; font-weight: 800; }
+.btn.dark:hover { background: #0a0a0a; color: #fff; filter: brightness(1.25); }
+.btn.ghost { background: rgba(10, 10, 10, .12); color: var(--on-green); }
+.btn.ghost:hover { background: #0a0a0a; color: #fff; }
+.cta :focus-visible { outline-color: #0a0a0a; }
+
+/* ---------- Footer: the name returns at scale ---------- */
+.foot { padding: 72px 0 0; overflow: hidden; }
+.foot-links { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0 -12px 8px; font-size: 1.0625rem; }
+.foot-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: var(--pill); color: var(--body); transition: background .15s, color .15s; }
+.foot-links a:hover { background: var(--surface-2); color: var(--fg); }
+.foot-mark {
+  margin: 0 0 -.12em -.04em; color: var(--green);
+  font-size: clamp(8rem, 37vw, 34rem); line-height: .78; letter-spacing: -.055em; font-weight: 800;
+  user-select: none;
+}
+:root[data-theme="light"] .foot-mark { color: var(--link); }
+
+/* ---------- Scroll reveal (only where the browser can do it) ---------- */
+@supports (animation-timeline: view()) {
+  .reveal, .band h2, .tour .statement, .run-grid > *, .cta-grid > * {
+    animation: rise linear backwards; animation-timeline: view(); animation-range: entry 0% entry 35%;
+  }
+}
+
+/* ---------- Tablet and phone: two-row bar, stacked sections ---------- */
+@media (max-width: 900px) {
+  :root:has(body.home) { --nav-h: 108px; }
+  .home .bar { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "logo search tools" "links links links"; gap: 0 12px; grid-template-rows: 64px 44px; }
+  .home .bar > * { min-width: 0; }
+  .home .links { margin: 0 -8px; padding: 0 4px; overflow-x: auto; scrollbar-width: none; }
+  .home .links::-webkit-scrollbar { display: none; }
+  .home .links a { flex: none; }
+  .home .search { width: 100%; }
+  .home .theme span { display: none; }
+
+  .hero { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 28px; }
+  .hero-side { max-width: 30rem; }
+  .row, .run-grid { grid-template-columns: minmax(0, 1fr); }
+  .cta-grid { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .home .ed { height: min(420px, 62svh); }
+}
+@media (max-width: 520px) {
+  .home .hero h1 { font-size: 6.5rem; }
+  pre.snip { padding: 18px 18px; font-size: 13.5px; }
+}
+
+/* ---------- Motion on load ---------- */
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@keyframes letter { from { opacity: 0; transform: translateY(.5em) rotate(5deg); } to { opacity: 1; transform: none; } }
+@keyframes ring { from { box-shadow: 0 0 0 0 rgba(82, 208, 23, .55); } to { box-shadow: 0 0 0 16px rgba(82, 208, 23, 0); } }
+
+.home .hero h1 { animation: none; }                       /* the letters animate, not the block */
+.home .hero h1 .ch { display: inline-block; animation: letter .9s var(--ease) backwards; animation-delay: calc(.1s + var(--i) * .08s); }
+.home .lede { animation-delay: .55s; }
+.home .ctas { animation-delay: .68s; }
+.home .win { animation-duration: 1s; animation-delay: .5s; }
+#run { animation: ring 1.3s 2.1s ease-out 2; }            /* two quiet pulses to say "press me" */
+
+/* ---------- No ligatures in code: keep this LAST (font: shorthands above reset it) ---------- */
+pre.snip, pre.snip *, .home code {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}

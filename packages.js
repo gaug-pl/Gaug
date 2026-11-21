@@ -86,7 +86,7 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
       foot.replaceChildren(h("div", { class: "pi-note" }, icon("info", "pi-ic"), "This package is provided as a ZIP file. After downloading, extract it to your Gaug packages directory."),
         h("div", { class: "pi-right" },
           p.mine && h("a", { class: "pi-tog", href: "#/update/" + encodeURIComponent(p.name), style: "text-decoration:none" }, "Update"),
-          me && me.role === "admin" && h("button", { class: "pi-tog", type: "button", onclick: async () => { try { await api("packages/" + encodeURIComponent(p.name) + "/verified", "POST", { verified: !p.verified }); render(); openInfo(p.name); } catch (e) { alert(e.message); } } }, p.verified ? "Remove verification" : "Mark as verified"),
+          me && me.role === "admin" && h("button", { class: "pi-tog", type: "button", onclick: e => { navigator.clipboard.writeText(`${location.origin}${location.pathname}#/pkg/${encodeURIComponent(p.name)}`); e.currentTarget.textContent = "Link copied"; } }, "Copy link"),
           h("div", { class: "pi-vf" + (p.verified ? " on" : "") }, icon("shield", "pi-ic"), h("div", {}, h("b", {}, p.verified ? "Verified by Gaug" : "Not verified"), h("small", {}, "v" + p.version)))));
     } catch (e) { body.replaceChildren(h("p", { class: "err" }, e.message)); }
   }
@@ -419,7 +419,7 @@ const API_BASE = "https://gaugregisteryapi.onrender.com";
   async function boot() {
     const d = await api("me");
     regOpen = d.registration; me = d.user; if (me) { me.bio = d.bio || ""; me.avatar = d.avatar || 0; } licenses = d.licenses || []; tags = d.tags || [];
-    if (!me && !/^#\/users\//.test(location.hash)) return authView(d.registration);
+    if (!me && !/^#\/(users|pkg)\//.test(location.hash)) return authView(d.registration);
     render();
   }
   window.addEventListener("hashchange", render);

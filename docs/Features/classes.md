@@ -1,7 +1,7 @@
 # Classes
 
 ::: warning
-This feature is still in progress and is not complete.
+This documentation is currently outdated, please wait while I finish it.
 :::
 
 To create a new class, you must type `class ClassName -> ();`, just like how you would write functions but with `class` in the beginning.
@@ -37,8 +37,42 @@ class ClassName -> (
     global var Variable = "1";
     
     global func foo() -> (
-        this.
+        print(this::lineNumber); # returns the line number relative to the class
     );
 );
+```
+:::
+
+## CMethods
+By default, cmethods are immutable/inassignable, unless for the init cmethod.
+
+::: details Example
+```gaug
+class CMethodsExample -> (
+    cmethod this::init() -> (
+        print("A new version of this class has been made!"); # executes if the class is created.
+    );
+)
+
+
+var Example = CMethodsExample(); # Output: A new version of this class has been made!
+```
+:::
+
+If you wish to convert a class using a converter builtin (*ify fbuiltins). You can!
+
+::: details Example
+```gaug
+class User -> (
+    global var ID = 5000;
+
+    cmethod this::stringify() -> (
+        return stringify(this.ID); # returns the stringified ID
+    );
+)
+
+
+var Example = stringify(User()); 
+print(Example); # Output: 5000
 ```
 :::
