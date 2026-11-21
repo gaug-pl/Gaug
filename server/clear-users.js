@@ -1,11 +1,15 @@
 "use strict";
-// Removes EVERY registered user from the Gaug registry database.
+// Removes EVERY account from the Gaug registry database: all regular users
+// AND all admin accounts stored in db.admins.
 //
-// For each user this also removes: their profile, published packages they own,
-// pending/reviewed submissions they own, and their sessions — the same
+// For each account this also removes: their profile, published packages they
+// own, pending/reviewed submissions they own, and their sessions — the same
 // cascade the admin "delete user" action performs per user.
-// Admin accounts are NOT touched: the built-in "Green" and every account in
-// db.admins keep working.
+//
+// NOTE: the built-in "Green" admin is NOT stored in the database — its
+// credentials come from ADMIN_HASH/ADMIN_SALT env vars or data/admin.json.
+// This script removes db.admins entries only; to fully remove Green, unset
+// those env vars on the host (and delete data/admin.json if present).
 //
 //   node server/clear-users.js          preview + confirm
 //   node server/clear-users.js --yes    skip the confirmation prompt
@@ -30,18 +34,21 @@ async function main() {
     db.users ||= {}; db.packages ||= {}; db.pending ||= {}; db.profiles ||= {};
     db.sessions ||= {}; db.bans ||= {}; db.admins ||= {};
 
-    const lns = Object.keys(db.users);
-    if (!lns.length) { console.log("No users to remove."); return; }
+    const userLns = Object.keys(db.users);
+    const adminLns = Object.keys(db.admins);
+    const allLns = [...userLns, ...adminLns];
+    if (!allLns.length) { console.log("No accounts to remove."); return; }
 
-    const pkgs = Object.values(db.packages || {}).filter(p => lns.includes(p.owner)).length;
-    const subs = Object.values(db.pending || {}).filter(p => lns.includes(p.owner)).length;
-    const sess = Object.values(db.sessions || {}).filter(s => lns.includes(s.ln)).length;
+    const pkgs = Object.values(db.packages || {}).filter(p => allLns.includes(p.owner)).length;
+    const subs = Object.values(db.pending || {}).filter(p => allLns.includes(p.owner)).length;
+    const sess = Object.values(db.sessions || {}).filter(s => allLns.includes(s.ln)).length;
     const ips = Object.keys(db.bans || {}).length;
 
-    console.log(`This will permanently remove ${lns.length} user account(s):`);
-    for (const ln of lns) console.log(`  - ${db.users[ln].name} (@${ln})`);
+    console.log(`This will permanently remove ${userLns.length} user account(s) and ${adminLns.length} admin account(s):`);
+    for (const ln of userLns) console.log(`  user  - ${db.users[ln].name} (@${ln})`);
+    for (const ln of adminLns) console.log(`  admin - ${db.admins[ln].name} (@${ln})`);
     console.log(`Along with: ${pkgs} published package(s), ${subs} submission(s), ${sess} session(s).`);
-    console.log(`IP bans (${ips}) and admin accounts are kept.`);
+    console.log(`IP bans (${ips}) are kept. The built-in 'Green' admin is not in the database — see notes above.`);
 
     if (!process.argv.includes("--yes")) {
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -50,8 +57,9 @@ async function main() {
       if (answer !== "yes") { console.log("Cancelled."); return; }
     }
 
-    for (const ln of lns) {
+    for (const ln of allLns) {
       delete db.users[ln];
+      delete db.admins[ln];
       delete db.profiles[ln];
       for (const k of Object.keys(db.packages)) if (db.packages[k].owner === ln) delete db.packages[k];
       for (const k of Object.keys(db.pending)) if (db.pending[k].owner === ln) delete db.pending[k];
@@ -62,7 +70,7 @@ async function main() {
       "UPDATE gaug_storage SET data = $1::jsonb, updated_at = NOW() WHERE id = 1",
       [JSON.stringify(db)]
     );
-    console.log(`Removed ${lns.length} user(s) and all of their data.`);
+    console.log(`Removed ${allLns.length} account(s) and all of their data.`);
   } finally {
     await pool.end().catch(() => {});
   }
