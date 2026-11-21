@@ -167,6 +167,13 @@ function own(obj, key) {
     : undefined;
 }
 
+/* Admin identities. The built-in "green" is active only while credentials
+   exist (ADMIN_HASH/ADMIN_SALT env vars or data/admin.json) or a db.admins
+   entry exists; db.admins holds additional accounts managed by
+   server/add-admin.js. Removing the env vars AND the db entry removes Green. */
+const greenAdminActive = () => !!readAdmin() || !!own(db.admins, "green");
+const isAdminLn = ln => ln === "green" ? greenAdminActive() : !!own(db.admins, ln);
+
 
 /* ---------- crypto ---------- */
 const sha = s => crypto.createHash("sha256").update(s).digest("hex");
@@ -316,7 +323,8 @@ function getSession(req) {
   const c = (req.headers.cookie || "").split(/;\s*/).find(x => x.startsWith(SID + "="));
   if (!c) return null;
   const k = sha(c.slice(SID.length + 1)), s = sessions.get(k);
-  if (!s || s.exp < Date.now() || (db.users[s.ln] && db.users[s.ln].banned)) { dropSession(k); return null; }
+  if (!s || s.exp < Date.now() || (db.users[s.ln] && db.users[s.ln].banned) ||
+      (s.role === "admin" && !isAdminLn(s.ln))) { dropSession(k); return null; }
   return { ...s, k };
 }
 setInterval(() => {
@@ -368,20 +376,20 @@ function sameOrigin(req) {
 
 /* ---------- public profiles ---------- */
 const bannedOwner = ln => { const u = own(db.users, ln); return !!(u && u.banned); };   // banned users disappear from public pages
-const isAdminOwner = ln => ln === "green" || !!own(db.admins, ln);   // "Verified/admin" badge on packages
-const ownerId = ln => ln === "green" ? 1 : ((own(db.admins, ln) || own(db.users, ln) || {}).id || null);
+const isAdminOwner = isAdminLn;   // "Verified/admin" badge on packages
+const ownerId = ln => ln === "green" ? (greenAdminActive() ? 1 : null) : ((own(db.admins, ln) || own(db.users, ln) || {}).id || null);
 function findUser(ref) {   // ref is a profile number ("1") or a username
   if (/^\d{1,9}$/.test(ref)) {
     const id = +ref;
-    if (id === 1) return { ln: "green", name: "Green", role: "admin", id: 1 };
+    if (id === 1 && greenAdminActive()) return { ln: "green", name: "Green", role: "admin", id: 1 };
     for (const [ln, u] of Object.entries(db.users)) if (u.id === id) return { ln, name: u.name, role: "user", id, banned: u.banned };
     for (const [ln, a] of Object.entries(db.admins)) if (a.id === id) return { ln, name: a.name, role: "admin", id };
     return null;
   }
   const ln = ref.toLowerCase();
-  if (ln === "green") return { ln, name: "Green", role: "admin", id: 1 };
   const adm = own(db.admins, ln);
   if (adm) return { ln, name: adm.name, role: "admin", id: adm.id };
+  if (ln === "green" && greenAdminActive()) return { ln, name: "Green", role: "admin", id: 1 };
   const u = own(db.users, ln);
   return u ? { ln, name: u.name, role: "user", id: u.id, banned: u.banned } : null;
 }
@@ -438,8 +446,8 @@ async function api(req, res, url) {
     const isAdmin = ln === "green" || !!adm;
     if (limited(kIp, 10, 15 * 60e3) || limited(kAcc, isAdmin ? 8 : 20, 15 * 60e3)) return fail(res, 429, "Too many attempts. Try again in 15 minutes.");
     let rec = null;
-    if (ln === "green") { const ad = readAdmin(); if (ad) rec = { name: "Green", role: "admin", salt: ad.salt, hash: ad.hash }; }
-    else if (adm) rec = { name: adm.name, role: "admin", salt: adm.salt, hash: adm.hash };
+    if (adm) rec = { name: adm.name, role: "admin", salt: adm.salt, hash: adm.hash };
+    else if (ln === "green") { const ad = readAdmin(); if (ad) rec = { name: "Green", role: "admin", salt: ad.salt, hash: ad.hash }; }
     else if (Object.prototype.hasOwnProperty.call(db.users, ln)) rec = { ...db.users[ln], role: "user" };
     const h = await hashPw(p, rec ? rec.salt : DUMMY_SALT);
     const ok = !!rec && crypto.timingSafeEqual(h, Buffer.from(rec.hash, "hex"));

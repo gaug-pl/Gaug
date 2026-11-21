@@ -59,7 +59,7 @@ async function addAdmin(pool, username) {
     process.exit(1);
   }
   const ln = username.toLowerCase();
-  if (ln === "green" || isReserved(ln)) {
+  if (ln !== "green" && isReserved(ln)) {
     console.error(`'${username}' is a reserved name.`);
     process.exit(1);
   }
@@ -91,11 +91,16 @@ async function listAdmins(pool) {
 async function removeAdmin(pool, username) {
   const ln = username.toLowerCase();
   const db = await readStore(pool);
-  if (ln === "green") { console.error("The built-in 'Green' admin cannot be removed here."); process.exit(1); }
-  if (!db.admins[ln]) { console.error(`'${username}' is not an admin.`); process.exit(1); }
+  if (!db.admins[ln]) {
+    console.error(ln === "green"
+      ? "There is no db.admins 'green' entry — the built-in Green uses env vars / admin.json, which this script cannot remove."
+      : `'${username}' is not an admin.`);
+    process.exit(1);
+  }
   delete db.admins[ln];
   await writeStore(pool, db);
-  console.log(`Admin '${username}' removed.`);
+  console.log(`Admin '${username}' removed.` +
+    (ln === "green" ? " Note: the built-in Green may still be active via ADMIN_HASH/ADMIN_SALT or data/admin.json." : ""));
 }
 
 (async () => {

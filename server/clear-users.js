@@ -8,8 +8,9 @@
 //
 // NOTE: the built-in "Green" admin is NOT stored in the database — its
 // credentials come from ADMIN_HASH/ADMIN_SALT env vars or data/admin.json.
-// This script removes db.admins entries only; to fully remove Green, unset
-// those env vars on the host (and delete data/admin.json if present).
+// This script removes db.admins entries and all "green" sessions, but to fully
+// remove Green you must ALSO unset those env vars on the host (and delete
+// data/admin.json if present), then redeploy.
 //
 //   node server/clear-users.js          preview + confirm
 //   node server/clear-users.js --yes    skip the confirmation prompt
@@ -37,11 +38,12 @@ async function main() {
     const userLns = Object.keys(db.users);
     const adminLns = Object.keys(db.admins);
     const allLns = [...userLns, ...adminLns];
-    if (!allLns.length) { console.log("No accounts to remove."); return; }
+    const hasGreenSessions = Object.values(db.sessions || {}).some(s => s.ln === "green");
+    if (!allLns.length && !hasGreenSessions) { console.log("No accounts to remove."); return; }
 
     const pkgs = Object.values(db.packages || {}).filter(p => allLns.includes(p.owner)).length;
     const subs = Object.values(db.pending || {}).filter(p => allLns.includes(p.owner)).length;
-    const sess = Object.values(db.sessions || {}).filter(s => allLns.includes(s.ln)).length;
+    const sess = Object.values(db.sessions || {}).filter(s => allLns.includes(s.ln) || s.ln === "green").length;
     const ips = Object.keys(db.bans || {}).length;
 
     console.log(`This will permanently remove ${userLns.length} user account(s) and ${adminLns.length} admin account(s):`);
@@ -63,7 +65,9 @@ async function main() {
       delete db.profiles[ln];
       for (const k of Object.keys(db.packages)) if (db.packages[k].owner === ln) delete db.packages[k];
       for (const k of Object.keys(db.pending)) if (db.pending[k].owner === ln) delete db.pending[k];
-      for (const [k, v] of Object.entries(db.sessions)) if (v.ln === ln) delete db.sessions[k];
+    }
+    for (const [k, v] of Object.entries(db.sessions)) {
+      if (allLns.includes(v.ln) || v.ln === "green") delete db.sessions[k];
     }
 
     await pool.query(
