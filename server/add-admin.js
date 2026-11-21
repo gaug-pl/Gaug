@@ -14,7 +14,7 @@ const crypto = require("crypto"), readline = require("readline");
 const { Pool } = require("pg");
 
 const USER_RE = /^[A-Za-z0-9_]{3,20}$/;
-const RESERVED = ["green", "admin", "administrator", "root", "system", "moderator", "staff", "owner", "gaug"];
+const RESERVED = ["green", "admin", "administrator", "root", "system", "moderator", "staff", "owner"];
 const isReserved = n => RESERVED.includes(n.toLowerCase().replace(/_/g, ""));
 
 let ask;
